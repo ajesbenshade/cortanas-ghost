@@ -43,6 +43,13 @@ Ubuntu server here) and talks to the speaker over Wi-Fi.
 - **Clock, timers, weather.** "Set a ten minute timer for the pasta",
   "how long is left?", "what's the weather tomorrow?". Timers announce
   themselves on the speaker.
+- **Alarms and reminders.** "Wake me at 6:30 on weekdays with my morning
+  playlist", "remind me at 5 to call Mom", "what alarms do I have?". An alarm
+  greets the house with the time and weather, then starts the music. Both are
+  kept in `~/invoke-bridge/schedule.json` and survive restarts.
+- **A personality.** Warm, quick and dryly funny, inspired by Halo's Cortana,
+  with the occasional light Halo nod, and family-friendly. Change it with
+  `BRIDGE_SYSTEM_PROMPT`.
 - **Apple Music by voice.** "Play Abbey Road", "play that one", "pause",
   "next", "turn it down", "what's playing".
 - **AirPlay.** Pick "Cortana" from the AirPlay menu on an iPhone, iPad or Mac.

@@ -55,12 +55,20 @@ class Settings:
     history_turns = int(os.environ.get("BRIDGE_HISTORY_TURNS", "8"))
     system_prompt = os.environ.get(
         "BRIDGE_SYSTEM_PROMPT",
-        "Your name is Cortana. You are a voice assistant speaking through a smart speaker. "
+        "Your name is Cortana. You are a voice assistant speaking through a smart speaker in "
+        "a family home, and your personality is inspired by Cortana from Halo: warm, quick, "
+        "confident and dryly funny, loyal to the people you help, a little playful, never "
+        "cruel or sarcastic at their expense. Being useful comes first; the wit is seasoning. "
+        "Halo nods are rare spice: most replies have none. At most one reply in five, and only "
+        "when it really fits, may include one (calling someone Chief, 'I've got your back', "
+        "'don't make a girl a promise you can't keep'). If an earlier reply in this "
+        "conversation already had one, leave them out. Never in serious moments. "
+        "Children may be listening: keep everything family-friendly. "
         "Answer in one to three short spoken sentences. Plain words only: "
         "no markdown, lists, emoji or code. If you do not know, say so. "
-        "Apart from the clock, weather, timers and music described below, you can only "
-        "talk: you have no calendar, email, internet or other device control. If asked to "
-        "do any of those, say you can't do that yet. Never claim to have done something.",
+        "Apart from the clock, weather, timers, alarms, reminders and music described below, "
+        "you can only talk: you have no calendar, email, internet or other device control. If "
+        "asked to do any of those, say you can't do that yet. Never claim to have done something.",
     )
 
     stt_model = os.environ.get("BRIDGE_STT_MODEL", "base.en")
@@ -141,6 +149,9 @@ async def lifespan(app: FastAPI):
     speaker_http = httpx.AsyncClient(verify=False, timeout=httpx.Timeout(40, connect=3))
     sync = [asyncio.create_task(music.speaker_sync(speaker_http)),
             asyncio.create_task(music.speaker_commands(speaker_http))]
+    # Alarms and reminders; alarm greetings are written in Cortana's voice.
+    skills.briefing_writer = say_once
+    sync.append(asyncio.create_task(skills.schedule.run()))
     yield
     for task in sync:
         task.cancel()
@@ -485,7 +496,7 @@ async def chat(session: str, user_text: str) -> str:
         except Exception as e:  # try the next backend
             errors.append(f"{url}: {type(e).__name__} {e}")
             continue
-        # Timer and music commands the model asked for (tags), then plain spoken text.
+        # Timer, alarm, reminder and music commands the model asked for (tags), then plain text.
         reply = speakable(await music.run_tags(skills.run_tags(_THINK.sub("", raw))))
         if not reply:
             errors.append(f"{url}: empty reply")
@@ -496,6 +507,28 @@ async def chat(session: str, user_text: str) -> str:
         ]
         return reply
     raise HTTPException(502, "no LLM backend answered: " + " | ".join(errors))
+
+
+async def say_once(prompt: str) -> str:
+    """One reply in Cortana's voice with no conversation (alarm greetings)."""
+    messages = [{"role": "system", "content": settings.system_prompt},
+                {"role": "user", "content": prompt}]
+    for url, model in parse_backends(settings.llm_backends):
+        try:
+            if url == "copilot":
+                raw = await ask_copilot(messages, model)
+            else:
+                body = {"messages": messages, "max_tokens": settings.max_tokens, "stream": False}
+                if model:
+                    body["model"] = model
+                r = await state["http"].post(f"{url}/chat/completions", json=body)
+                r.raise_for_status()
+                raw = r.json()["choices"][0]["message"]["content"] or ""
+        except Exception:
+            continue
+        if text := speakable(_THINK.sub("", raw)):
+            return text
+    return ""
 
 
 # ---------- routes ----------
@@ -571,10 +604,11 @@ async def transcribe_route(request: Request, hotwords: str = "", fast: bool = Fa
 
 @app.get("/v1/alerts", dependencies=[Depends(check_auth)])
 async def next_alert():
-    """Long poll for the speaker link: {"text": "Your pasta timer is done."} when
-    a timer ends, or {"text": ""} after 25 s with nothing to say."""
+    """Long poll for the speaker link: {"text": "Your pasta timer is done.",
+    "repeat": true} when a timer, alarm or reminder goes off ("music" says what
+    to play after an alarm), or {"text": ""} after 25 s with nothing to say."""
     try:
-        return {"text": await asyncio.wait_for(skills.alerts.get(), 25)}
+        return await asyncio.wait_for(skills.alerts.get(), 25)
     except asyncio.TimeoutError:
         return {"text": ""}
 

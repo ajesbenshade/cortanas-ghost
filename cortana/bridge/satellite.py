@@ -609,14 +609,17 @@ class Link:
             self.mic.put_nowait(e)
 
     async def announce(self) -> None:
-        """Say timer alerts from the bridge, between conversations."""
+        """Say timers, alarms and reminders from the bridge, between conversations.
+        An alarm with music starts it once the greeting is done (unless the
+        greeting was cut short with "Cortana, stop")."""
         while True:
             try:
                 r = await self.http.get("/v1/alerts", timeout=35)
-                text = r.json().get("text", "") if r.status_code == 200 else ""
+                alert = r.json() if r.status_code == 200 else {}
             except (httpx.HTTPError, ValueError):
                 await asyncio.sleep(5)
                 continue
+            text = alert.get("text", "") if isinstance(alert, dict) else ""
             if not text:
                 continue
             while self.busy or self.phraser.active:  # don't talk over anyone
@@ -625,8 +628,15 @@ class Link:
             self.busy = True
             try:
                 await self.duck(True)
-                await self.speak(f"{text} {text}")  # twice, in case the first is missed
+                # Short alerts twice, in case the first is missed.
+                await self.speak(f"{text} {text}" if alert.get("repeat") else text)
+                stopped = self.barge.is_set()
                 await self.duck(False)
+                if alert.get("music") and not stopped:
+                    await self.http.post("/v1/ask", json={"text": f"play {alert['music']}",
+                                                          "session": Cfg.session})
+            except httpx.HTTPError as e:
+                print(f"  alert error: {e}")
             finally:
                 self.phraser.reset()
                 self.busy = False
