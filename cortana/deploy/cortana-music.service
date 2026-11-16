@@ -1,0 +1,17 @@
+[Unit]
+Description=Cortana's Ghost Apple Music player (Chrome on the virtual screen)
+After=cortana-display.service cortana-bridge.service
+Requires=cortana-display.service cortana-bridge.service
+
+[Service]
+User=@USER@
+Environment=DISPLAY=:99
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+Environment=PULSE_SINK=cortana_music
+ExecStartPre=/bin/sh -c "for i in $(seq 1 60); do curl -sf http://127.0.0.1:8765/health >/dev/null && exit 0; sleep 2; done"
+ExecStart=/usr/bin/google-chrome --user-data-dir=@HOME@/invoke-bridge/chrome --no-first-run --no-default-browser-check --password-store=basic --autoplay-policy=no-user-gesture-required --window-position=0,0 --window-size=1280,800 --app=http://localhost:8765/music?unattended
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

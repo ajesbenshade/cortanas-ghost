@@ -1,0 +1,22 @@
+[Unit]
+Description=Cortana's Ghost voice bridge (speech-to-text, LLM, voice, music)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@REPO@/cortana/bridge
+# GitHub Copilot CLI (run `copilot login` once as @USER@); falls back to Copilot's own choice.
+# For a local model instead: BRIDGE_LLM=http://127.0.0.1:11434/v1|qwen3.8:27b
+Environment=BRIDGE_LLM=copilot|claude-haiku-5.5;copilot|
+Environment=PYTHONUNBUFFERED=1
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+# Clock and weather: a town ("City, ST") or just a time zone.
+#Environment=CORTANA_PLACE=Springfield, IL
+#Environment=CORTANA_TZ=America/Chicago
+ExecStart=@HOME@/invoke-bridge/venv/bin/python server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

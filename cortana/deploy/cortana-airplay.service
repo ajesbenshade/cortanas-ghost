@@ -1,0 +1,14 @@
+[Unit]
+Description=Cortana's Ghost AirPlay receiver (shairport-sync into Cortana Music)
+After=network-online.target avahi-daemon.service user@@UID@.service
+Wants=network-online.target avahi-daemon.service
+
+[Service]
+User=@USER@
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+ExecStart=/usr/bin/shairport-sync -c @REPO@/cortana/airplay/airplay.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

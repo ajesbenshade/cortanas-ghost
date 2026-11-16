@@ -1,3 +1,29 @@
+# Cortana's Ghost
+
+**The Harman Kardon Invoke, talking as Cortana again.**
+
+Cortana's Ghost is a fork of [Encore](https://github.com/ScottNorton/Encore), the
+community firmware for the Invoke, plus a small server that brings the voice
+assistant back: "Hey Cortana" with a blue listening ring, answers from a
+language model, timers, weather, Apple Music by voice, AirPlay, and a
+Cortana-themed dashboard. Speech-to-text runs on your own hardware.
+
+What this fork adds to Encore:
+
+- **Firmware:** a fix for long replies cutting off, a network audio input
+  (TCP 10710) for streaming music from another machine, and an optional mode
+  that keeps the mic on while the speaker talks, so Cortana can be interrupted.
+- **Dashboard:** rebranded as Cortana's Ghost with a holographic blue theme.
+- **[`cortana/`](cortana/README.md):** the voice bridge, speaker link, Apple Music
+  player, AirPlay receiver and setup for an Ubuntu server.
+
+Cortana and Halo are trademarks of Microsoft. This project is not affiliated
+with or endorsed by Microsoft or Harman Kardon.
+
+---
+
+*Everything below is Encore's own README, which still applies to the firmware.*
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="branding/readme-banner-dark.png">

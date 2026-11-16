@@ -1,0 +1,228 @@
+/* ── Cortana theme ───────────────────────────────────────────────────────────
+   Holographic blue over deep navy, angular corner brackets, a faint hex grid
+   and scan lines. Layered after every other dashboard stylesheet by
+   13-cortana-theme.py, so it only overrides variables and adds effects; the
+   gold palette in brand/palette.rs is swapped for blue by the same script.
+   Original styling inspired by the Halo look; no Halo artwork is used. */
+
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/fonts/Rajdhani-500.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/Rajdhani-600.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Rajdhani';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/Rajdhani-700.woff2') format('woff2');
+}
+
+/* ── Night (default): deep navy, cyan light ── */
+:root {
+    --stage: #050b14;
+    --surface: #0a1626;
+    --surface-2: #0c1a2d;
+    --surface-hover: #10223a;
+    --surface-input: #07111e;
+    --sunken: #030810;
+    --border: rgba(120,210,255,0.12);
+    --border-strong: rgba(120,210,255,0.26);
+    --text: #e3f6ff;
+    --text-secondary: #a6d8f0;
+    --text-tertiary: #7fb3d1;
+    --text-muted: #77a6c2;
+    --text-on-accent: #031019;
+    --accent-active: #2aa9e0;
+    --accent-glow: #7fe3ff;
+    --accent-soft: rgba(79,200,255,0.14);
+    --source-active: #7fe3ff;
+    --focus-ring-inner: #050b14;
+    --purple: #a98bff;
+    --cyan: #4fc8ff;
+    --glow-sm: 0 0 6px rgba(79,200,255,0.50);
+    --glow-md: 0 0 14px rgba(79,200,255,0.40);
+    --shadow: 0 4px 24px rgba(0,8,20,0.65);
+    --shadow-hover: 0 6px 28px rgba(0,8,20,0.75);
+    --radius: 6px;
+    --radius-sm: 4px;
+    --font-display: 'Rajdhani', var(--font-sans);
+    --holo: rgba(79,200,255,0.55);
+    --holo-faint: rgba(79,200,255,0.06);
+    --hex-stroke: rgba(79,200,255,0.05);
+    --scan: rgba(79,200,255,0.025);
+}
+
+/* ── Day: cool white with deep blue light ── */
+[data-theme='light'] {
+    --stage: #eaf4fa;
+    --surface: #f8fcff;
+    --surface-2: #e3eff7;
+    --surface-hover: #dceaf4;
+    --surface-input: #f8fcff;
+    --sunken: #d3e3ee;
+    --border: rgba(10,60,90,0.12);
+    --border-strong: rgba(10,60,90,0.22);
+    --text: #071a26;
+    --text-secondary: #24506a;
+    --text-tertiary: #3d6680;
+    --text-muted: #3d6680;
+    --text-on-accent: #f4fbff;
+    --accent-active: #08506f;
+    --accent-glow: #1592c9;
+    --accent-soft: rgba(11,95,138,0.12);
+    --source-active: #0e78ad;
+    --focus-ring-inner: #f8fcff;
+    --glow-sm: 0 0 6px rgba(11,95,138,0.30);
+    --glow-md: 0 0 14px rgba(11,95,138,0.22);
+    --shadow: 0 4px 20px rgba(10,40,60,0.12);
+    --shadow-hover: 0 6px 24px rgba(10,40,60,0.18);
+    --holo: rgba(11,95,138,0.55);
+    --holo-faint: rgba(11,95,138,0.05);
+    --hex-stroke: rgba(11,95,138,0.06);
+    --scan: rgba(11,95,138,0.02);
+}
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        --stage: #eaf4fa;
+        --surface: #f8fcff;
+        --surface-2: #e3eff7;
+        --surface-hover: #dceaf4;
+        --surface-input: #f8fcff;
+        --sunken: #d3e3ee;
+        --border: rgba(10,60,90,0.12);
+        --border-strong: rgba(10,60,90,0.22);
+        --text: #071a26;
+        --text-secondary: #24506a;
+        --text-tertiary: #3d6680;
+        --text-muted: #3d6680;
+        --text-on-accent: #f4fbff;
+        --accent-active: #08506f;
+        --accent-glow: #1592c9;
+        --accent-soft: rgba(11,95,138,0.12);
+        --source-active: #0e78ad;
+        --focus-ring-inner: #f8fcff;
+        --glow-sm: 0 0 6px rgba(11,95,138,0.30);
+        --glow-md: 0 0 14px rgba(11,95,138,0.22);
+        --shadow: 0 4px 20px rgba(10,40,60,0.12);
+        --shadow-hover: 0 6px 24px rgba(10,40,60,0.18);
+        --holo: rgba(11,95,138,0.55);
+        --holo-faint: rgba(11,95,138,0.05);
+        --hex-stroke: rgba(11,95,138,0.06);
+        --scan: rgba(11,95,138,0.02);
+    }
+}
+
+/* ── Backdrop: soft glow from above, hex grid, scan lines ── */
+body {
+    background-color: var(--stage);
+    background-image:
+        radial-gradient(ellipse 120% 60% at 50% -10%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.16), transparent 60%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 0 L56 16.2 L56 48.5 L28 64.7 L0 48.5 L0 16.2 Z M28 64.7 L28 97' fill='none' stroke='%234fc8ff' stroke-opacity='0.07' stroke-width='1'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+}
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background: repeating-linear-gradient(to bottom, var(--scan) 0, var(--scan) 1px, transparent 1px, transparent 3px);
+}
+
+/* ── Type: squared display face for headings and labels ── */
+.card-title, .section-label, .header-device-name, .tab-btn, .nav-label,
+.logo-text, .btn, h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: 0.08em;
+}
+.card-title, .section-label, .tab-btn, .nav-label {
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.header-device-name, .logo-text {
+    font-weight: 700;
+    text-shadow: 0 0 12px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45);
+}
+.section-label {
+    color: var(--accent);
+}
+
+/* ── Cards: glass panel with glowing corner brackets ── */
+.card {
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow), inset 0 0 24px var(--holo-faint);
+    background-image:
+        linear-gradient(var(--holo), var(--holo)), linear-gradient(var(--holo), var(--holo)),
+        linear-gradient(var(--holo), var(--holo)), linear-gradient(var(--holo), var(--holo)),
+        linear-gradient(var(--holo), var(--holo)), linear-gradient(var(--holo), var(--holo)),
+        linear-gradient(var(--holo), var(--holo)), linear-gradient(var(--holo), var(--holo)),
+        linear-gradient(160deg, var(--holo-faint), transparent 45%);
+    background-size:
+        14px 2px, 2px 14px, 14px 2px, 2px 14px,
+        14px 2px, 2px 14px, 14px 2px, 2px 14px, 100% 100%;
+    background-position:
+        top left, top left, top right, top right,
+        bottom left, bottom left, bottom right, bottom right, center;
+    background-repeat: no-repeat;
+    transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-hover), inset 0 0 28px var(--holo-faint), 0 0 18px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.08);
+}
+
+/* ── Header: thin light bar that sweeps along the bottom edge ── */
+.header {
+    position: relative;
+    border-bottom: 1px solid var(--border);
+}
+.header::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 40% 100%;
+    background-repeat: no-repeat;
+    animation: cortana-sweep 6s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes cortana-sweep {
+    0%   { background-position: -40% 0; }
+    100% { background-position: 140% 0; }
+}
+
+/* ── Controls ── */
+.btn {
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-hover), var(--accent) 55%, var(--accent-active));
+    border-color: transparent;
+    box-shadow: var(--glow-sm);
+}
+.btn-primary:hover {
+    box-shadow: var(--glow-md);
+}
+.tab-btn[aria-selected='true'], .tab-btn.active, .nav-item.active {
+    text-shadow: 0 0 10px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.6);
+}
+input[type='range'] {
+    accent-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .header::after { animation: none; }
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Cortana's Ghost speaker link (Invoke wake word and conversations)
+After=cortana-bridge.service
+Requires=cortana-bridge.service
+
+[Service]
+User=@USER@
+WorkingDirectory=@REPO@/cortana/bridge
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/bin/sh -c "for i in $(seq 1 60); do curl -sf http://127.0.0.1:8765/health >/dev/null && exit 0; sleep 2; done"
+ExecStart=@HOME@/invoke-bridge/venv/bin/python -u satellite.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

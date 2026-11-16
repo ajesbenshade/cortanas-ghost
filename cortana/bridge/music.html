@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cortana music player</title>
+<style>
+  :root { --bg:#f6f5f2; --fg:#1c1b19; --mut:#6b6862; --card:#fff; --line:#dedbd4; --ok:#1f7a4d; --bad:#b3372e; --accent:#2757c9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151514; --fg:#ecebe7; --mut:#9a978f; --card:#1f1f1d; --line:#33322f; --ok:#5fc490; --bad:#f0857c; --accent:#8fb0ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:640px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:var(--mut); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:4px 0; }
+  .row span:first-child { color:var(--mut); }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  button { font:inherit; padding:10px 16px; border-radius:8px; border:1px solid var(--line); background:var(--accent); color:#fff; cursor:pointer; }
+  button.plain { background:transparent; color:var(--fg); }
+  button:disabled { opacity:.5; cursor:default; }
+  #now b { display:block; font-size:18px; }
+  #now span { color:var(--mut); }
+  #log { font:13px/1.5 ui-monospace, Consolas, monospace; color:var(--mut); white-space:pre-wrap; max-height:220px; overflow:auto; margin:0; }
+  .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+</style>
+<script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" data-web-components async></script>
+</head>
+<body>
+<main>
+  <h1>Cortana music player</h1>
+  <p class="sub">Keep this tab open. Music plays here and is sent to the speaker over Wi-Fi: set this browser's output device to “Steam Streaming Speakers” in Windows' Volume mixer.</p>
+
+  <div class="card">
+    <div class="row"><span>Bridge</span><span id="s-bridge">connecting…</span></div>
+    <div class="row"><span>Apple Music</span><span id="s-apple">loading…</span></div>
+    <div class="row"><span>Sound</span><span id="s-sound" class="bad">click Start once</span></div>
+    <div class="btns">
+      <button id="start">Start</button>
+      <button id="signout" class="plain" hidden>Sign out</button>
+    </div>
+  </div>
+
+  <div class="card" id="now"><span>Nothing playing</span></div>
+
+  <div class="card">
+    <div class="btns" style="margin-top:0">
+      <button class="plain" data-act="previous">Previous</button>
+      <button class="plain" data-act="pause">Pause</button>
+      <button class="plain" data-act="resume">Play</button>
+      <button class="plain" data-act="next">Next</button>
+    </div>
+  </div>
+
+  <div class="card"><pre id="log"></pre></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const log = (msg) => { const el = $("log"); el.textContent += new Date().toLocaleTimeString() + "  " + msg + "\n"; el.scrollTop = el.scrollHeight; };
+const set = (id, text, good) => { const el = $(id); el.textContent = text; el.className = good === undefined ? "" : good ? "ok" : "bad"; };
+
+let music = null;
+let unlocked = false;
+let userVolume = 1;
+let ducked = false;
+
+async function setup() {
+  const r = await fetch("/v1/music/token");
+  if (!r.ok) { set("s-apple", "not set up: add the Apple key and team.txt", false); log((await r.json()).detail || "token error"); return; }
+  const { token } = await r.json();
+  if (!window.MusicKit) await new Promise((res) => document.addEventListener("musickitloaded", res, { once: true }));
+  await MusicKit.configure({ developerToken: token, app: { name: "Cortana Bridge", build: "1.0" } });
+  music = MusicKit.getInstance();
+  music.autoplayEnabled = true;   // keep playing related songs when the queue ends
+  userVolume = music.volume;
+  for (const ev of ["playbackStateDidChange", "nowPlayingItemDidChange", "authorizationStatusDidChange"]) {
+    music.addEventListener(ev, report);
+  }
+  report();
+}
+
+function report() {
+  if (!music) return;
+  const item = music.nowPlayingItem;
+  const playing = music.playbackState === MusicKit.PlaybackStates.playing;
+  set("s-apple", music.isAuthorized ? "signed in" : "not signed in — click Start", music.isAuthorized);
+  $("signout").hidden = !music.isAuthorized;
+  $("now").innerHTML = item ? "<b></b><span></span>" : "<span>Nothing playing</span>";
+  if (item) { $("now").children[0].textContent = item.title; $("now").children[1].textContent = (item.artistName || "") + (playing ? "" : "  (paused)"); }
+  fetch("/v1/music/state", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signed_in: music.isAuthorized, playing, title: item ? item.title : null, artist: item ? item.artistName : null }) }).catch(() => {});
+}
+
+// ---- commands from the bridge ----
+
+const first = (results, type) => results[type] && results[type].data && results[type].data[0];
+
+async function play({ query, artist, kind }) {
+  const term = artist ? `${query} ${artist}` : query;
+  const sf = music.storefrontId || "us";
+  const res = await music.api.music(`/v1/catalog/${sf}/search`, { term, types: "songs,albums,playlists,artists", limit: 5 });
+  const results = (res.data && res.data.results) || {};
+  let order = kind ? [kind + "s"] : [];
+  const artistHit = first(results, "artists");
+  if (!kind && !artist && artistHit && artistHit.attributes.name.toLowerCase() === query.toLowerCase()) order = ["artists"];
+  // "play Abbey Road" means the album, not the best-matching song from it
+  const albumHit = first(results, "albums");
+  if (!kind && albumHit && albumHit.attributes.name.toLowerCase() === query.toLowerCase()) order = ["albums"];
+  order = order.concat(["songs", "albums", "playlists", "artists"]);
+  let type = null, item = null;
+  for (const t of order) { item = first(results, t); if (item) { type = t; break; } }
+  if (!item) return { ok: false, text: `I couldn't find ${term} on Apple Music.` };
+  const a = item.attributes;
+  // Start loading without waiting for the first note, so Cortana can say what
+  // is playing while Apple Music is still buffering it.
+  const start = (queue) => music.setQueue({ ...queue, startPlaying: true })
+    .then(report).catch((err) => log("couldn't start playback: " + (err && err.message || err)));
+  if (type === "songs") {
+    start({ song: item.id });
+    return { ok: true, text: `Playing ${a.name} by ${a.artistName}.` };
+  }
+  if (type === "albums") {
+    start({ album: item.id });
+    return { ok: true, text: `Playing the album ${a.name} by ${a.artistName}.` };
+  }
+  if (type === "playlists") {
+    start({ playlist: item.id });
+    return { ok: true, text: `Playing the playlist ${a.name}.` };
+  }
+  const top = await music.api.music(`/v1/catalog/${sf}/artists/${item.id}/view/top-songs`, { limit: 25 });
+  const ids = ((top.data && top.data.data) || []).map((s) => s.id);
+  if (!ids.length) return { ok: false, text: `I couldn't find songs by ${a.name}.` };
+  start({ songs: ids });
+  return { ok: true, text: `Playing top songs by ${a.name}.` };
+}
+
+async function run(cmd) {
+  if (!music) return { ok: false, text: "Apple Music isn't set up on the computer yet." };
+  if (cmd.action === "duck") {
+    if (cmd.on && !ducked) { userVolume = music.volume; music.volume = Math.min(userVolume, 0.12); ducked = true; }
+    else if (!cmd.on && ducked) { music.volume = userVolume; ducked = false; }
+    return { ok: true, text: "" };
+  }
+  if (!music.isAuthorized) return { ok: false, text: "Apple Music isn't signed in on the computer." };
+  if (!unlocked) return { ok: false, text: "The music player needs one click on Start on the computer first." };
+  const item = music.nowPlayingItem;
+  switch (cmd.action) {
+    case "play": return await play(cmd);
+    case "pause": await music.pause(); return { ok: true, text: "Paused." };
+    case "resume":
+      if (!item) return { ok: false, text: "Nothing is queued. Tell me what to play." };
+      await music.play(); return { ok: true, text: "" };
+    case "next": await music.skipToNextItem(); return { ok: true, text: "" };
+    case "previous": await music.skipToPreviousItem(); return { ok: true, text: "" };
+    case "nowplaying":
+      return item ? { ok: true, text: `This is ${item.title} by ${item.artistName}.` } : { ok: true, text: "Nothing is playing." };
+    case "volume": {
+      const base = ducked ? userVolume : music.volume;
+      const level = Math.max(0, Math.min(1, cmd.level !== undefined ? cmd.level : base + cmd.delta));
+      userVolume = level; if (!ducked) music.volume = level;
+      return { ok: true, text: `Music volume ${Math.round(level * 100)} percent.` };
+    }
+  }
+  return { ok: false, text: "I don't know that music command." };
+}
+
+function listen() {
+  const es = new EventSource("/v1/music/events");
+  es.onopen = () => { set("s-bridge", "connected", true); report(); };
+  es.onerror = () => set("s-bridge", "disconnected — is the bridge running?", false);
+  es.onmessage = async (e) => {
+    const cmd = JSON.parse(e.data);
+    let out;
+    try { out = await run(cmd); } catch (err) { out = { ok: false, text: "Apple Music reported an error." }; log("error: " + (err && err.message || err)); }
+    if (cmd.action !== "duck") log(cmd.action + (cmd.query ? " \"" + cmd.query + "\"" : "") + " -> " + (out.text || "ok"));
+    fetch("/v1/music/result", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cmd.id, ...out }) });
+    report();
+  };
+}
+
+// ---- buttons ----
+
+$("start").onclick = async () => {
+  unlocked = true;                       // this click lets the browser play sound later
+  set("s-sound", "enabled", true);
+  if (!music) { log("Apple Music is not set up yet."); return; }
+  try { if (!music.isAuthorized) await music.authorize(); } catch (err) { log("sign-in cancelled or failed"); }
+  report();
+};
+$("signout").onclick = async () => { if (music) { await music.unauthorize(); report(); } };
+for (const b of document.querySelectorAll("button[data-act]")) {
+  b.onclick = async () => { unlocked = true; set("s-sound", "enabled", true); try { await run({ action: b.dataset.act }); } catch (err) { log("error: " + err.message); } report(); };
+}
+
+// On a server with no one to click Start, the browser is launched with
+// autoplay allowed and opens /music?unattended.
+if (new URLSearchParams(location.search).has("unattended")) { unlocked = true; set("s-sound", "enabled", true); }
+
+listen();
+setup().catch((err) => { set("s-apple", "failed to load", false); log("setup error: " + (err && err.message || err)); });
+</script>
+</body>
+</html>
