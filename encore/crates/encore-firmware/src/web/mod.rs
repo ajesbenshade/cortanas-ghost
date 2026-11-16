@@ -272,6 +272,11 @@ impl Subsystem for WebSubsystem {
             .route("/api/wifi/scan", get(api::wifi_scan_handler))
             .route("/api/reboot", post(api::reboot_handler))
             .route("/api/factory-reset", post(api::factory_reset_handler))
+            .route(
+                "/api/music/status",
+                get(crate::music::get_status_handler).post(crate::music::status_handler),
+            )
+            .route("/api/music/command", get(crate::music::command_handler))
             .route("/ca.crt", get(tls::ca_cert_handler))
             .route("/ws", get(ws::ws_handler))
             .fallback(static_handler)

@@ -4,7 +4,7 @@
 //! ServerMsg, sends ClientMsg. Reconnects with exponential backoff
 //! on disconnect/error (1s → 2s → 4s → ... → 30s cap).
 
-use encore_common::protocol::{BtEvent, ClientMsg, ServerMsg};
+use encore_common::protocol::{BtEvent, ClientMsg, ServerMsg, SourceId};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -183,6 +183,7 @@ fn dispatch(msg: ServerMsg) {
         ServerMsg::BootMode { .. } => "BootMode",
         ServerMsg::AudioPowerState { .. } => "AudioPowerState",
         ServerMsg::MicLevels { .. } => "MicLevels",
+        ServerMsg::MusicStatus(_) => "MusicStatus",
     };
     match msg {
         ServerMsg::SystemStatus(snap) => {
@@ -290,6 +291,14 @@ fn dispatch(msg: ServerMsg) {
                 } else {
                     Some(ps)
                 };
+            });
+        }
+        ServerMsg::VolumeChanged {
+            source: SourceId::Music,
+            level,
+        } => {
+            crate::state::with_mut(|s| {
+                s.music.get_or_insert_with(Default::default).volume = level;
             });
         }
         ServerMsg::VolumeChanged { level, .. } => {
@@ -444,6 +453,9 @@ fn dispatch(msg: ServerMsg) {
                 s.mic_right_peak = right_peak;
             });
         }
+        ServerMsg::MusicStatus(status) => {
+            crate::state::with_mut(|s| s.music = Some(status));
+        }
     }
 
     // Mini now-playing bar: surgical update independent of the page `cares` gate,
@@ -488,14 +500,16 @@ fn dispatch(msg: ServerMsg) {
             | "BluetoothStatus"
             | "BluetoothTrack"
             | "BluetoothPlayStatus"
-            | "BluetoothEvent",
+            | "BluetoothEvent"
+            | "MusicStatus",
         ) => true,
         // Sound: levels, visualizations, EQ/DRC/DSP, volume.
         (
             "sound",
             "AudioLevels" | "AudioSpectrum" | "AudioWaveform" | "MicLevels" | "VolumeChanged"
             | "EqState" | "DrcState" | "DspInfo" | "DacRegValue" | "DspSpiResponse"
-            | "AudioPowerState",
+            | "AudioPowerState"
+            | "MusicStatus",
         ) => true,
         ("lights", "LedStateChanged") => true,
         ("speakers", "GroupStatus") => true,

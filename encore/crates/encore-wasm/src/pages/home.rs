@@ -42,6 +42,9 @@ pub fn render(container: &web_sys::Element) {
     // ── Bluetooth now-playing — shown when BT is the active source. ──
     render_bt_nowplaying(&stage);
 
+    // ── Music now-playing (Apple Music / AirPlay) — shown when Music is active. ──
+    render_music_nowplaying(&stage);
+
     // ── Slim status / quick strip. ──
     render_status_quick(&stage);
 
@@ -52,16 +55,20 @@ pub fn render(container: &web_sys::Element) {
 pub fn update() {
     let spotify_enabled =
         crate::state::with(|s| s.config.as_ref().map(|c| c.spotify_enabled).unwrap_or(true));
-    // When Bluetooth is the active source, surface its now-playing card and let
-    // the Spotify card step aside.
-    let bt_active = crate::state::with(crate::state::active_source) == "bluetooth";
+    // When Bluetooth or Music is the active source, surface its now-playing card
+    // and let the Spotify card step aside.
+    let source = crate::state::with(crate::state::active_source);
+    let bt_active = source == "bluetooth";
+    let music_active = source == "music";
     if let Some(w) = dom::get_el("stage-spotify-wrap") {
-        dom::set_style(&w, "display", if bt_active { "none" } else { "" });
+        dom::set_style(&w, "display", if bt_active || music_active { "none" } else { "" });
     }
-    if spotify_enabled && !bt_active {
+    if spotify_enabled && !bt_active && !music_active {
         crate::pages::spotify::update();
     }
     update_bt_nowplaying(bt_active);
+    update_music_nowplaying(music_active);
+    crate::graphics::tuner::update();
     refresh_glance();
 
     // Master quick-chip caption tracks live master volume.
@@ -157,6 +164,117 @@ fn update_bt_nowplaying(bt_active: bool) {
         }
         crate::components::nowplaying::update("stage-bt", s.bt_playstatus.as_ref());
     });
+}
+
+/// Build the Stage Music now-playing card (hidden until Music is active).
+fn render_music_nowplaying(container: &web_sys::Element) {
+    let card = dom::el("div", "card music-np", None);
+    card.set_id("stage-music-np");
+    dom::set_style(&card, "display", "none");
+    let service = dom::el("div", "card-title", Some("Music"));
+    service.set_id("stage-music-service");
+    dom::append(&card, &service);
+
+    let row = dom::el("div", "music-np-row", None);
+    let cover = dom::create_el("img");
+    cover.set_id("stage-music-cover");
+    dom::set_class(&cover, "music-np-cover");
+    dom::set_attr(&cover, "alt", "");
+    dom::append(&row, &cover);
+    let text = dom::el("div", "music-np-text", None);
+    let title = dom::el("div", "music-np-title", None);
+    title.set_id("stage-music-title");
+    dom::append(&text, &title);
+    let artist = dom::el("div", "text-muted", None);
+    artist.set_id("stage-music-artist");
+    dom::append(&text, &artist);
+    let album = dom::el("div", "text-muted text-sm", None);
+    album.set_id("stage-music-album");
+    dom::append(&text, &album);
+    dom::append(&row, &text);
+    dom::append(&card, &row);
+
+    let controls = dom::el("div", "music-np-controls", None);
+    for (glyph, label, id, action) in [
+        ("\u{23EE}", "Previous track", "stage-music-prev", "previous"),
+        ("\u{25B6}", "Play or pause", "stage-music-playpause", ""),
+        ("\u{23ED}", "Next track", "stage-music-next", "next"),
+    ] {
+        let btn = dom::el("button", "btn", Some(glyph));
+        btn.set_id(id);
+        dom::set_attr(&btn, "aria-label", label);
+        dom::on_click(&btn, move || {
+            let action = if action.is_empty() {
+                let playing = crate::state::with(|s| s.music.as_ref().is_some_and(|m| m.playing));
+                if playing { "pause" } else { "play" }
+            } else {
+                action
+            };
+            crate::ws::send_msg(&ClientMsg::MusicControl {
+                action: action.into(),
+            });
+        });
+        dom::append(&controls, &btn);
+    }
+    dom::append(&card, &controls);
+    let hint = dom::el(
+        "div",
+        "text-sm text-muted mt-8",
+        Some("Say \u{201C}Hey Cortana, play\u{2026}\u{201D} or AirPlay to \u{201C}Cortana\u{201D}."),
+    );
+    hint.set_id("stage-music-hint");
+    dom::append(&card, &hint);
+    dom::append(container, &card);
+}
+
+/// Show and populate the Stage Music card when Music is the active source.
+fn update_music_nowplaying(active: bool) {
+    let Some(card) = dom::get_el("stage-music-np") else {
+        return;
+    };
+    if !active {
+        dom::set_style(&card, "display", "none");
+        return;
+    }
+    dom::set_style(&card, "display", "");
+    let m = crate::state::with(|s| s.music.clone()).unwrap_or_default();
+    let set = |id: &str, text: &str| {
+        if let Some(el) = dom::get_el(id) {
+            dom::set_text(&el, text);
+            dom::set_style(&el, "display", if text.is_empty() { "none" } else { "" });
+        }
+    };
+    set("stage-music-service", if m.service.is_empty() { "Music" } else { &m.service });
+    // Some AirPlay senders (videos, browsers, a Mac's system sound) send no track info.
+    let fallback = if m.service.is_empty() {
+        "Music over Wi-Fi".to_string()
+    } else {
+        format!("Playing from {}", m.service)
+    };
+    set("stage-music-title", if m.title.is_empty() { &fallback } else { &m.title });
+    set("stage-music-artist", &m.artist);
+    set("stage-music-album", &m.album);
+    set(
+        "stage-music-hint",
+        if m.title.is_empty() {
+            "Say \u{201C}Hey Cortana, play\u{2026}\u{201D} or AirPlay to \u{201C}Cortana\u{201D}."
+        } else {
+            ""
+        },
+    );
+    if let Some(img) = dom::get_el("stage-music-cover") {
+        if m.cover_url.is_empty() {
+            dom::set_style(&img, "display", "none");
+        } else {
+            if img.get_attribute("src").as_deref() != Some(m.cover_url.as_str()) {
+                dom::set_attr(&img, "src", &m.cover_url);
+            }
+            dom::set_style(&img, "display", "");
+        }
+    }
+    if let Some(el) = dom::get_el("stage-music-playpause") {
+        dom::set_text(&el, if m.playing { "\u{23F8}" } else { "\u{25B6}" });
+    }
 }
 
 fn render_status_quick(container: &web_sys::Element) {

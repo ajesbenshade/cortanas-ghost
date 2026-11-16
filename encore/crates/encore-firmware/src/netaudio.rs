@@ -57,6 +57,7 @@ impl NetAudioSubsystem {
                     if playing {
                         self.drain().await;
                         playing = false;
+                        crate::music::set_streaming(false);
                         info!("NetAudio: idle");
                     }
                     continue;
@@ -70,9 +71,11 @@ impl NetAudioSubsystem {
             };
             carry.extend_from_slice(&buf[..n]);
             let usable = carry.len() / 4 * 4; // whole stereo frames only
+            // Music source volume (dashboard slider), applied in 24.8 fixed point.
+            let gain = crate::music::VOLUME.load(std::sync::atomic::Ordering::Relaxed) as i64 * 256 / 100;
             let samples: Vec<i32> = carry[..usable]
                 .chunks_exact(2)
-                .map(|c| (i16::from_le_bytes([c[0], c[1]]) as i32) << 16)
+                .map(|c| (((i16::from_le_bytes([c[0], c[1]]) as i64) << 16) * gain >> 8) as i32)
                 .collect();
             carry.drain(..usable);
 
@@ -82,6 +85,7 @@ impl NetAudioSubsystem {
                 if !playing && self.slot.available() >= PREBUFFER {
                     self.slot.set_active(true);
                     playing = true;
+                    crate::music::set_streaming(true);
                     info!("NetAudio: playing");
                 }
                 if off < samples.len() {
@@ -90,6 +94,7 @@ impl NetAudioSubsystem {
                     if !playing {
                         self.slot.set_active(true);
                         playing = true;
+                        crate::music::set_streaming(true);
                     }
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
@@ -97,6 +102,7 @@ impl NetAudioSubsystem {
         }
         if playing {
             self.drain().await;
+            crate::music::set_streaming(false);
         }
         Ok(false)
     }

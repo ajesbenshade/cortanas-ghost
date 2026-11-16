@@ -28,6 +28,49 @@ pub enum SourceId {
     Bluetooth,
     Wyoming,
     System,
+    /// Music streamed in over Wi-Fi (network audio input, port 10710): Apple
+    /// Music or AirPlay from a Cortana's Ghost server.
+    Music,
+}
+
+/// Now-playing for the Music source, reported by the server that streams it
+/// (POST /api/music/status). `streaming` is set by the speaker itself: true
+/// while audio is arriving on the network input.
+#[derive(
+    Archive,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct MusicStatus {
+    /// "Apple Music", "AirPlay", or empty when nothing is reported.
+    #[serde(default)]
+    pub service: String,
+    #[serde(default)]
+    pub playing: bool,
+    #[serde(default)]
+    pub streaming: bool,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub artist: String,
+    #[serde(default)]
+    pub album: String,
+    /// Artwork URL the browser can load directly (may be empty).
+    #[serde(default)]
+    pub cover_url: String,
+    #[serde(default)]
+    pub duration_ms: u32,
+    #[serde(default)]
+    pub position_ms: u32,
+    /// Music source volume on the speaker, 0-100.
+    #[serde(default)]
+    pub volume: u8,
 }
 
 /// Spotify playback actions
@@ -687,6 +730,8 @@ pub enum ServerMsg {
         left_peak: f32,
         right_peak: f32,
     },
+    /// Music source now-playing (Apple Music / AirPlay via the network input).
+    MusicStatus(MusicStatus),
 }
 
 /// Dashboard -> Firmware messages
@@ -769,6 +814,11 @@ pub enum ClientMsg {
     // Mic test
     StartMicTest,
     StopMicTest,
+    /// Transport for the Music source: "play", "pause", "next" or "previous".
+    /// Queued for the streaming server, which polls GET /api/music/command.
+    MusicControl {
+        action: String,
+    },
 }
 
 /// Full config mirror for dashboard editor
@@ -1130,6 +1180,7 @@ mod tests {
             SourceId::Bluetooth,
             SourceId::Wyoming,
             SourceId::System,
+            SourceId::Music,
         ] {
             let rt: SourceId = rkyv_rt!(&id, SourceId);
             assert_eq!(rt, id);

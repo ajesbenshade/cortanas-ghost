@@ -1802,4 +1802,32 @@ canvas {
         scroll-behavior: auto !important;
     }
 }
+
+/* ── Music now-playing (Apple Music / AirPlay over Wi-Fi) ── */
+.music-np-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-top: var(--space-2);
+}
+.music-np-cover {
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    box-shadow: var(--shadow);
+}
+.music-np-text { min-width: 0; }
+.music-np-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.music-np-controls {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
 "#;

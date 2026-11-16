@@ -40,6 +40,15 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
+    // Music source now-playing and volume, so the Stage card and the Sound
+    // slider are right from the first paint.
+    {
+        let msg = encore_common::protocol::ServerMsg::MusicStatus(crate::music::current());
+        if let Ok(json) = serde_json::to_string(&msg) {
+            let _ = socket.send(Message::Text(json.into())).await;
+        }
+    }
+
     // Send cached WiFi connect result if available (client may have missed it
     // during the AP/WiFi transition that drops the WebSocket)
     {

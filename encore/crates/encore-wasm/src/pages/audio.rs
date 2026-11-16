@@ -151,6 +151,7 @@ fn render_source_volumes(container: &web_sys::Element) {
 
     for (name, id, source) in [
         ("Spotify", "spotify", SourceId::Spotify),
+        ("Music (Apple Music, AirPlay)", "music", SourceId::Music),
         ("Bluetooth", "bluetooth", SourceId::Bluetooth),
         ("Voice", "wyoming", SourceId::Wyoming),
     ] {
@@ -1337,6 +1338,7 @@ pub fn update() {
         // Show/hide source volume rows
         for (row_id, subsystem_name) in [
             ("mix-row-spotify", "spotify"),
+            ("mix-row-music", "netaudio"),
             ("mix-row-bluetooth", "bluetooth"),
             ("mix-row-wyoming", "wyoming"),
         ] {
@@ -1347,6 +1349,16 @@ pub fn update() {
                 .unwrap_or(false);
             if let Some(el) = dom::get_el(row_id) {
                 dom::set_style(&el, "display", if active { "block" } else { "none" });
+            }
+        }
+
+        // Music volume lives on the speaker (not in config); it comes with MusicStatus.
+        if let Some(ref m) = s.music {
+            if let Some(el) = dom::get_el("vol-music") {
+                dom::set_attr(&el, "value", &m.volume.to_string());
+            }
+            if let Some(el) = dom::get_el("vol-music-val") {
+                dom::set_text(&el, &format!("{}%", m.volume));
             }
         }
 

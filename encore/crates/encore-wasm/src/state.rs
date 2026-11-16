@@ -33,6 +33,8 @@ pub struct AppState {
     pub bt_track: Option<BtTrack>,
     /// AVRCP playback position/duration (None when idle/unknown).
     pub bt_playstatus: Option<BtPlayStatus>,
+    /// Music source (Apple Music / AirPlay over the network input).
+    pub music: Option<MusicStatus>,
     pub master_volume: u8,
 
     // ── UI state ──
@@ -111,9 +113,10 @@ pub struct AppState {
 /// Derive the active audio source for the Tuner indicator and mini-bar.
 ///
 /// Pure function of state — there is NO source-switch protocol message (see the
-/// design v2 resolution). Precedence: Spotify if playing, then a connected
-/// Bluetooth device (last event wins over `bt_devices`), then Voice if the
-/// `wyoming` subsystem is Running. Defaults to "spotify" when idle.
+/// design v2 resolution). Precedence: Spotify if playing, then Music while it
+/// streams or plays, then a connected Bluetooth device (last event wins over
+/// `bt_devices`), then Voice if the `wyoming` subsystem is Running. Defaults to
+/// "spotify" when idle.
 pub fn active_source(s: &AppState) -> &'static str {
     if s.spotify_status
         .as_ref()
@@ -121,6 +124,9 @@ pub fn active_source(s: &AppState) -> &'static str {
         .unwrap_or(false)
     {
         return "spotify";
+    }
+    if s.music.as_ref().is_some_and(|m| m.streaming || m.playing) {
+        return "music";
     }
     // Last-event-wins: a later DeviceConnected for a different addr replaces the
     // current one; a DeviceDisconnected for the connected addr clears it.
@@ -171,6 +177,7 @@ impl Default for AppState {
             bt_status: None,
             bt_track: None,
             bt_playstatus: None,
+            music: None,
             master_volume: 30,
             active_page: "home".into(),
             config_dirty: false,

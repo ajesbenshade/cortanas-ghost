@@ -23,6 +23,8 @@ mod manager;
 #[cfg(target_os = "linux")]
 mod mcu;
 #[cfg(target_os = "linux")]
+mod music;
+#[cfg(target_os = "linux")]
 mod netaudio;
 mod network;
 #[cfg(target_os = "linux")]
@@ -216,6 +218,7 @@ async fn main() -> anyhow::Result<()> {
         let ap_active = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let mut web = web::WebSubsystem::new(None);
         web.set_ws_tx(ws_tx.clone());
+        music::set_ws_tx(ws_tx.clone());
         web.set_ap_active(ap_active.clone());
         web.set_safe_mode(safe_mode);
         web.set_boot_source(boot_source.clone());
@@ -888,6 +891,9 @@ async fn main() -> anyhow::Result<()> {
                                         encore_common::protocol::SpotifyAction::SetVolume { level },
                                     );
                                 }
+                                encore_common::protocol::SourceId::Music => {
+                                    music::set_volume(level);
+                                }
                                 _ => {
                                     // BT/Wyoming/System: no per-source volume yet
                                     info!(
@@ -1188,6 +1194,9 @@ async fn main() -> anyhow::Result<()> {
                         }
                         ClientMsg::StopMicTest => {
                             let _ = audio_tx.try_send(audio::subsystem::AudioCmd::StopMicTest);
+                        }
+                        ClientMsg::MusicControl { action } => {
+                            music::push_command(&action);
                         }
                     }
                 }

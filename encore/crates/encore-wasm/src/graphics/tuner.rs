@@ -1,5 +1,5 @@
 //! Source Tuner — a horizontal backlit dial bar with data-driven stations
-//! (Spotify / Bluetooth / Voice). It is an INDICATOR plus navigation, not a
+//! (Spotify / Music / Bluetooth / Voice). It is an INDICATOR plus navigation, not a
 //! switch: the active station is derived from playback state
 //! (`crate::state::active_source`) and tapping a station navigates to its
 //! controls. The accessible primary is a `radiogroup` of `role="radio"` buttons
@@ -16,6 +16,7 @@ use std::cell::Cell;
 /// values; `glyph` is the small source icon painted in the row above the bar.
 pub const STATIONS: &[(&str, &str, &str)] = &[
     ("spotify", "Spotify", "\u{266B}"),     // ♫ note
+    ("music", "Music", "\u{25CE}"),         // ◎ Apple Music / AirPlay over Wi-Fi
     ("bluetooth", "Bluetooth", "\u{0192}"), // ƒ (Bluetooth-ish rune)
     ("voice", "Voice", "\u{1F3A4}"),        // 🎤 mic
 ];
@@ -137,13 +138,34 @@ pub fn render(container: &web_sys::Element) {
     glide_to(active_idx);
 }
 
+/// Re-derive the active source and move the needle and the checked station to
+/// it. Called from the Stage page's `update()`, so the dial follows playback
+/// (a song starting over AirPlay, Bluetooth connecting) without a page reload.
+pub fn update() {
+    use crate::dom;
+    let active_idx = station_index(crate::state::with(crate::state::active_source));
+    glide_to(active_idx);
+    for (i, (id, _label, _glyph)) in STATIONS.iter().enumerate() {
+        if let Some(btn) = dom::get_el(&format!("tuner-station-{}", id)) {
+            let on = i == active_idx;
+            dom::set_attr(&btn, "aria-checked", if on { "true" } else { "false" });
+            dom::set_attr(&btn, "tabindex", if on { "0" } else { "-1" });
+            if on {
+                dom::add_class(&btn, "active");
+            } else {
+                dom::remove_class(&btn, "active");
+            }
+        }
+    }
+}
+
 /// Navigate to a source's controls. No source-switch message exists; the Tuner
 /// is navigation only (design v2 resolution).
 fn navigate_to_source(id: &str) {
     let hash = match id {
         "bluetooth" => "#settings/devices", // Bluetooth lives on the Devices page
         "voice" => "#settings/integrations", // voice/assistant lives under Integrations
-        _ => "#home",                       // Spotify controls live on Stage
+        _ => "#home",                       // Spotify and Music controls live on Stage
     };
     crate::dom::window().location().set_hash(hash).ok();
 }
@@ -187,20 +209,22 @@ mod tests {
     #[test]
     fn index_matches_ids() {
         assert_eq!(station_index("spotify"), 0);
-        assert_eq!(station_index("bluetooth"), 1);
-        assert_eq!(station_index("voice"), 2);
+        assert_eq!(station_index("music"), 1);
+        assert_eq!(station_index("bluetooth"), 2);
+        assert_eq!(station_index("voice"), 3);
         assert_eq!(station_index("nonsense"), 0);
     }
 
     #[test]
     fn x_partitions_into_bands() {
-        // 3 stations -> [0,1/3) spotify, [1/3,2/3) bluetooth, [2/3,1) voice.
+        // 4 stations -> quarters: spotify, music, bluetooth, voice.
         assert_eq!(station_from_x(0.0), 0);
-        assert_eq!(station_from_x(0.32), 0);
-        assert_eq!(station_from_x(0.34), 1);
-        assert_eq!(station_from_x(0.5), 1);
-        assert_eq!(station_from_x(0.67), 2);
-        assert_eq!(station_from_x(1.0), 2); // clamped, never out of range
+        assert_eq!(station_from_x(0.24), 0);
+        assert_eq!(station_from_x(0.26), 1);
+        assert_eq!(station_from_x(0.49), 1);
+        assert_eq!(station_from_x(0.51), 2);
+        assert_eq!(station_from_x(0.76), 3);
+        assert_eq!(station_from_x(1.0), 3); // clamped, never out of range
     }
 
     #[test]
@@ -215,10 +239,11 @@ mod tests {
 
     #[test]
     fn needle_centers_each_band() {
-        // 3 stations -> centers at 1/6, 1/2, 5/6 of the bar width.
-        assert!((needle_pct(0) - 100.0 / 6.0).abs() < 1e-9);
-        assert!((needle_pct(1) - 50.0).abs() < 1e-9);
-        assert!((needle_pct(2) - 500.0 / 6.0).abs() < 1e-9);
+        // 4 stations -> centers at 1/8, 3/8, 5/8, 7/8 of the bar width.
+        assert!((needle_pct(0) - 12.5).abs() < 1e-9);
+        assert!((needle_pct(1) - 37.5).abs() < 1e-9);
+        assert!((needle_pct(2) - 62.5).abs() < 1e-9);
+        assert!((needle_pct(3) - 87.5).abs() < 1e-9);
     }
 
     #[test]
