@@ -240,12 +240,87 @@ async def try_handle(text: str) -> str | None:
     intent = parse(text)
     if intent and intent["action"] == "sleep":  # works for AirPlay too
         return set_sleep(intent["minutes"])
-    if not intent or not credentials():
+    if not intent:
         return None
-    if intent["action"] != "play" and not hub.connected:
-        return None  # "stop", "continue" and so on mean something else with no player
-    result = await execute(intent)
+    if intent["action"] == "play":
+        if not credentials():
+            return None
+    elif await current_service() is None:
+        return None  # "stop", "continue" and so on mean something else with no music
+    result = await control(intent)
     return result.get("text") or ("Okay." if result.get("ok") else "That didn't work.")
+
+
+async def current_service() -> str | None:
+    """Which player commands like "pause" or "next" should go to: AirPlay while a
+    device plays (or is paused mid-session), else the Apple Music player."""
+    air = await airplay_now()
+    if air.get("playing"):
+        return "airplay"
+    if hub.playing:
+        return "apple"
+    if air:
+        return "airplay"
+    return "apple" if hub.connected else None
+
+
+_AIRPLAY_METHODS = {"pause": "Pause", "resume": "Play", "next": "Next", "previous": "Previous"}
+_airplay_level = 100  # AirPlay volume set by voice (the phone's slider is separate)
+_airplay_muted = False  # muted because the phone ignored a pause
+
+
+async def _mute_airplay(on: bool) -> None:
+    global _airplay_muted
+    _airplay_muted = on
+    for s in await airplay_streams():
+        await _pactl("set-sink-input-mute", str(s["index"]), "1" if on else "0")
+
+
+async def _pause_airplay() -> dict:
+    """Ask the phone to pause. Some apps ignore remote commands from the
+    receiver, so if it is still playing a moment later, mute the stream instead."""
+    await _busctl("call", *REMOTE, "Pause")
+    for _ in range(12):
+        await asyncio.sleep(0.25)
+        if not await airplay_playing():
+            return {"ok": True, "text": "Paused."}
+    await _mute_airplay(True)
+    return {"ok": True, "text": "The app on your phone won't take a pause from me, so I've muted it. Say resume to bring it back."}
+
+
+async def control(intent: dict) -> dict:
+    """Carry out a music command on whichever player is in use."""
+    action = intent["action"]
+    if action == "play":
+        if (await airplay_now()).get("playing"):  # don't play two things at once
+            await _busctl("call", *REMOTE, "Pause")
+        return await execute(intent)
+    if await current_service() != "airplay":
+        return await execute(intent)
+    if action == "pause":
+        return await _pause_airplay()
+    if action == "resume":
+        await _mute_airplay(False)
+    if action in _AIRPLAY_METHODS:
+        await _busctl("call", *REMOTE, _AIRPLAY_METHODS[action])
+        return {"ok": True, "text": ""}
+    if action == "nowplaying":
+        air = await airplay_now()
+        if air.get("title"):
+            by = f" by {air['artist']}" if air.get("artist") else ""
+            return {"ok": True, "text": f"This is {air['title']}{by}, over AirPlay."}
+        return {"ok": True, "text": "Something is playing over AirPlay, but it didn't say what."}
+    if action == "volume":
+        global _airplay_level
+        level = intent.get("level")
+        new = round(level * 100) if level is not None else _airplay_level + round(intent["delta"] * 100)
+        _airplay_level = max(0, min(100, new))
+        for s in await airplay_streams():
+            await _pactl("set-sink-input-volume", str(s["index"]), f"{_airplay_level}%")
+        return {"ok": True, "text": f"AirPlay volume {_airplay_level} percent."}
+    if action == "repeat":
+        return {"ok": False, "text": "I can't loop AirPlay from here; use repeat in the app that's playing."}
+    return {"ok": False, "text": "I can't do that with AirPlay."}
 
 
 # ---------- sleep timer ----------
@@ -301,7 +376,7 @@ async def fade_out_and_stop() -> None:
         if hub.connected:
             await execute({"action": "pause"})
         if (await airplay_now()).get("playing"):
-            await _busctl("call", *MPRIS, "Pause")
+            await _busctl("call", *REMOTE, "Pause")
         await asyncio.sleep(1)
     finally:
         await _pactl("set-sink-volume", "cortana_music", "100%")
@@ -321,7 +396,8 @@ async def execute(intent: dict) -> dict:
 # Added to the system prompt when Apple Music is ready, so requests the phrase
 # parser above misses ("go ahead and play that one") still work.
 MODEL_HELP = (
-    "You can control Apple Music on this speaker. To do it, end your reply with one tag: "
+    "You can control the music on this speaker: Apple Music, and pause/resume/next/previous/"
+    "volume also reach a phone or Mac playing over AirPlay. To do it, end your reply with one tag: "
     '<music action="play" query="what to search for" artist="artist, if known"/> '
     '(add kind="song", "album", "playlist" or "artist" when it is clear, and repeat="yes" to '
     'loop it, e.g. for rain or white noise to sleep to), '
@@ -368,7 +444,7 @@ async def run_tags(reply: str) -> str:
             intent = {"action": "volume", "level": max(0, min(100, int(a["level"]))) / 100}
         else:
             continue
-        result = await execute(intent)
+        result = await control(intent)
         if not result.get("ok"):
             return result.get("text") or "That didn't work."
         if action == "play" and result.get("text"):
@@ -473,8 +549,9 @@ async def airplay_playing() -> bool:
 
 
 async def duck_airplay(on: bool) -> None:
+    level = min(15, _airplay_level) if on else _airplay_level  # back to the voice-set level
     for s in await airplay_streams():
-        await _pactl("set-sink-input-volume", str(s["index"]), "15%" if on else "100%")
+        await _pactl("set-sink-input-volume", str(s["index"]), f"{level}%")
 
 
 @router.get("/v1/music/status")
@@ -488,22 +565,40 @@ async def _busctl(*args: str) -> str:
 
 
 MPRIS = ("org.mpris.MediaPlayer2.ShairportSync", "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player")
+# Transport commands go through shairport-sync's own interface (its MPRIS Pause
+# is ignored). Whether it is playing comes from PipeWire: the stream is corked
+# while paused, and both D-Bus play states lag or flip.
+REMOTE = ("org.gnome.ShairportSync", "/org/gnome/ShairportSync", "org.gnome.ShairportSync.RemoteControl")
+
+
+def _short(title: str) -> str:
+    """First line of a title, cut to a speakable length (video apps send whole posts)."""
+    line = title.strip().splitlines()[0] if title.strip() else ""
+    return line if len(line) <= 80 else line[:80].rsplit(" ", 1)[0] + "…"
 
 
 async def airplay_now() -> dict:
     """AirPlay now-playing from shairport-sync's MPRIS interface ({} if idle)."""
-    out = await _busctl("--json=short", "get-property", *MPRIS, "PlaybackStatus", "Metadata")
+    # shairport-sync's own Active flag says whether a device is connected at all;
+    # MPRIS alone keeps a stale track id after the session ends.
+    active = await _busctl("--json=short", "get-property", "org.gnome.ShairportSync",
+                           "/org/gnome/ShairportSync", "org.gnome.ShairportSync", "Active")
+    # PipeWire remembers a mute for the next AirPlay stream (or one left over
+    # from a bridge restart); only a mute for an ignored pause should stay
+    if not _airplay_muted and any(st.get("mute") for st in await airplay_streams()):
+        await _mute_airplay(False)
+    if '"data":true' not in active.replace(" ", ""):
+        return {}
+    out = await _busctl("--json=short", "get-property", *MPRIS, "Metadata")
     try:
-        status, meta = (json.loads(line)["data"] for line in out.splitlines()[:2])
+        meta = json.loads(out)["data"]
     except (ValueError, KeyError):
-        return {}
-    if status == "Stopped" and not meta:
-        return {}
+        meta = {}
     value = lambda k: (meta.get(k) or {}).get("data")
     artist = value("xesam:artist") or []
     return {
-        "playing": status == "Playing",
-        "title": value("xesam:title") or "",
+        "playing": await airplay_playing(),
+        "title": _short(value("xesam:title") or ""),
         "artist": ", ".join(artist) if isinstance(artist, list) else str(artist),
         "album": value("xesam:album") or "",
         "duration_ms": int(value("mpris:length") or 0) // 1000,
@@ -581,12 +676,7 @@ async def speaker_commands(http) -> None:
                 await asyncio.sleep(10)
             continue
         try:
-            now = await music_now()
-            if now.get("service") == "AirPlay":
-                method = {"play": "Play", "pause": "Pause", "next": "Next", "previous": "Previous"}.get(action)
-                if method:
-                    await _busctl("call", *MPRIS, method)
-            elif hub.connected:
-                await execute({"action": "resume" if action == "play" else action})
+            if await current_service():
+                await control({"action": "resume" if action == "play" else action})
         except Exception as e:
             print(f"music: couldn't {action} ({type(e).__name__}: {e})")
