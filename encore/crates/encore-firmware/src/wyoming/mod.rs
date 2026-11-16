@@ -219,6 +219,9 @@ struct Session {
     trigger_rx: Option<tokio::sync::mpsc::Receiver<()>>,
     tts_rate: u32,
     muted: bool,
+    /// Keep streaming the mic during TTS (client event `listen-while-speaking`),
+    /// so the client can hear the user interrupt a reply.
+    listen_while_speaking: bool,
     streaming: bool,
 }
 
@@ -241,6 +244,7 @@ impl Session {
             trigger_rx,
             tts_rate: 22050,
             muted: false,
+            listen_while_speaking: false,
             streaming: false,
         }
     }
@@ -389,7 +393,7 @@ impl Session {
                     }
                 } => {
                     match mic_data {
-                        Some(samples) if !self.muted => {
+                        Some(samples) if !self.muted || self.listen_while_speaking => {
                             // Convert i16 samples to raw bytes for Wyoming audio-chunk
                             let bytes: Vec<u8> = samples.iter()
                                 .flat_map(|s| s.to_le_bytes())
@@ -594,6 +598,18 @@ impl Session {
 
             "run-satellite" => {
                 debug!("Wyoming: re-run (already streaming)");
+            }
+
+            "listen-while-speaking" => {
+                self.listen_while_speaking = event
+                    .data
+                    .get("enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                info!(
+                    "Wyoming: listen while speaking {}",
+                    if self.listen_while_speaking { "on" } else { "off" }
+                );
             }
 
             "describe" => {
