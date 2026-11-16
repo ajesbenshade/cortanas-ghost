@@ -23,6 +23,7 @@ mod manager;
 #[cfg(target_os = "linux")]
 mod mcu;
 #[cfg(target_os = "linux")]
+mod netaudio;
 mod network;
 #[cfg(target_os = "linux")]
 mod sense;
@@ -262,6 +263,7 @@ async fn main() -> anyhow::Result<()> {
         // Mark Wyoming as the voice/TTS source so the mixer ducks music while it plays.
         wyoming_slot.set_voice(true);
         let network_slot = audio.add_source().slot; // group follower writes here
+        let netaudio_slot = audio.add_source().slot; // music sent over Wi-Fi (port 10710)
 
         // Network tap: mixer writes post-EQ/DRC audio here when active (leader reads)
         let network_tap = crate::audio::mixer::MixerSlot::new();
@@ -661,6 +663,9 @@ async fn main() -> anyhow::Result<()> {
             wyoming_sub.set_suspend_rx(wyoming_suspend_rx);
             mgr.start(Box::new(wyoming_sub));
         }
+
+        // ── Network audio input (music over Wi-Fi) ──
+        mgr.start(Box::new(netaudio::NetAudioSubsystem::new(netaudio_slot, None)));
 
         // Voice session task — wake word detection + session state machine
         {
