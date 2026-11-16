@@ -137,7 +137,14 @@ async def lifespan(app: FastAPI):
                 await copilot_agent(model).start()
             except Exception as e:
                 print(f"Copilot didn't start ({type(e).__name__}: {e}); will retry on first question")
+    # Keep the speaker dashboard's Music card current (its certificate is self-signed).
+    speaker_http = httpx.AsyncClient(verify=False, timeout=httpx.Timeout(40, connect=3))
+    sync = [asyncio.create_task(music.speaker_sync(speaker_http)),
+            asyncio.create_task(music.speaker_commands(speaker_http))]
     yield
+    for task in sync:
+        task.cancel()
+    await speaker_http.aclose()
     for agent in state.get("copilot", {}).values():
         await agent.stop()
     await state["http"].aclose()
@@ -620,4 +627,6 @@ async def reset(body: ResetIn):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level="info")
+    # Standard asyncio, not uvloop: uvloop starts subprocesses (Copilot) with fork,
+    # which can deadlock in this multi-threaded process.
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level="info", loop="asyncio")

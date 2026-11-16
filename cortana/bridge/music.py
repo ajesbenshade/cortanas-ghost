@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -324,14 +325,23 @@ async def duck(body: Duck, request: Request):
 # phone, so ducking turns down its stream in PipeWire instead. Needs pactl and
 # XDG_RUNTIME_DIR pointing at the PipeWire session.
 
+async def _run(*cmd: str) -> str:
+    """Run a short command; its output, or "" on failure.
+
+    Uses subprocess in a worker thread rather than asyncio's subprocess support:
+    under uvloop that forks this busy, multi-threaded process, and the child can
+    deadlock before exec, freezing the bridge. subprocess launches with vfork."""
+    def run() -> str:
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        return r.stdout.decode() if r.returncode == 0 else ""
+    return await asyncio.to_thread(run)
+
+
 async def _pactl(*args: str) -> str:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "pactl", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await asyncio.wait_for(proc.communicate(), 3)
-    except (OSError, asyncio.TimeoutError):
-        return ""
-    return out.decode() if proc.returncode == 0 else ""
+    return await _run("pactl", *args)
 
 
 async def airplay_streams() -> list[dict]:
@@ -355,3 +365,112 @@ async def duck_airplay(on: bool) -> None:
 async def status(request: Request):
     local_only(request)
     return {"configured": credentials() is not None, "player_open": hub.connected, **hub.state}
+
+
+async def _busctl(*args: str) -> str:
+    return await _run("busctl", "--user", *args)
+
+
+MPRIS = ("org.mpris.MediaPlayer2.ShairportSync", "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player")
+
+
+async def airplay_now() -> dict:
+    """AirPlay now-playing from shairport-sync's MPRIS interface ({} if idle)."""
+    out = await _busctl("--json=short", "get-property", *MPRIS, "PlaybackStatus", "Metadata")
+    try:
+        status, meta = (json.loads(line)["data"] for line in out.splitlines()[:2])
+    except (ValueError, KeyError):
+        return {}
+    if status == "Stopped" and not meta:
+        return {}
+    value = lambda k: (meta.get(k) or {}).get("data")
+    artist = value("xesam:artist") or []
+    return {
+        "playing": status == "Playing",
+        "title": value("xesam:title") or "",
+        "artist": ", ".join(artist) if isinstance(artist, list) else str(artist),
+        "album": value("xesam:album") or "",
+        "duration_ms": int(value("mpris:length") or 0) // 1000,
+    }
+
+
+# ---------- the speaker's Music card ----------
+# Patched Encore firmware shows a "Music" source on its dashboard. This keeps
+# it up to date (POST /api/music/status) and carries out its transport buttons
+# (GET /api/music/command, a long poll). Firmware without it just answers 404.
+
+def _speaker() -> str:
+    host = os.environ.get("SPEAKER_HOST", "")
+    if host and host != "auto":
+        return host
+    try:
+        return (Path.home() / "invoke-bridge" / "speaker.txt").read_text().strip()
+    except OSError:
+        return ""
+
+
+async def music_now() -> dict:
+    """What the speaker should show: AirPlay while a device is sending, else Apple Music."""
+    air = await airplay_now()
+    if air and (air["playing"] or await airplay_playing()):
+        return {"service": "AirPlay", **air}
+    s = hub.state if hub.connected else {}
+    if s.get("title"):
+        return {"service": "Apple Music", "playing": bool(s.get("playing")),
+                "title": s.get("title") or "", "artist": s.get("artist") or "",
+                "album": s.get("album") or "", "cover_url": s.get("cover") or "",
+                "duration_ms": int(s.get("duration_ms") or 0), "position_ms": int(s.get("position_ms") or 0)}
+    if air:
+        return {"service": "AirPlay", **air}
+    return {}
+
+
+async def speaker_sync(http) -> None:
+    """Report now-playing to the speaker while it changes, at least every 15 s."""
+    last, sent_at = None, 0.0
+    while True:
+        await asyncio.sleep(2)
+        host = _speaker()
+        if not host:
+            continue
+        try:
+            now = await music_now()
+        except Exception:
+            continue
+        key = {k: v for k, v in now.items() if k != "position_ms"}
+        if key == last and time.monotonic() - sent_at < 15:
+            continue
+        try:
+            r = await http.post(f"https://{host}/api/music/status", json=now, timeout=4)
+            if r.status_code == 404:
+                await asyncio.sleep(60)  # firmware without the Music source
+                continue
+            last, sent_at = key, time.monotonic()
+        except Exception:
+            await asyncio.sleep(5)
+
+
+async def speaker_commands(http) -> None:
+    """Carry out the Music card's play/pause/next/previous buttons."""
+    while True:
+        host = _speaker()
+        try:
+            r = await http.get(f"https://{host}/api/music/command", timeout=35) if host else None
+            # Older firmware answers unknown paths with the dashboard page, not JSON.
+            action = r.json().get("action") if r is not None and r.status_code == 200 else None
+        except Exception:
+            r, action = None, None
+        if not action:
+            if r is None or r.status_code != 200:
+                await asyncio.sleep(10)
+            continue
+        try:
+            now = await music_now()
+            if now.get("service") == "AirPlay":
+                method = {"play": "Play", "pause": "Pause", "next": "Next", "previous": "Previous"}.get(action)
+                if method:
+                    await _busctl("call", *MPRIS, method)
+            elif hub.connected:
+                await execute({"action": "resume" if action == "play" else action})
+        except Exception as e:
+            print(f"music: couldn't {action} ({type(e).__name__}: {e})")

@@ -90,8 +90,13 @@ function report() {
   $("signout").hidden = !music.isAuthorized;
   $("now").innerHTML = item ? "<b></b><span></span>" : "<span>Nothing playing</span>";
   if (item) { $("now").children[0].textContent = item.title; $("now").children[1].textContent = (item.artistName || "") + (playing ? "" : "  (paused)"); }
+  // album, cover and timing feed the Music card on the speaker's dashboard
+  const cover = item && item.artwork ? MusicKit.formatArtworkURL(item.artwork, 300, 300) : null;
   fetch("/v1/music/state", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ signed_in: music.isAuthorized, playing, title: item ? item.title : null, artist: item ? item.artistName : null }) }).catch(() => {});
+    body: JSON.stringify({ signed_in: music.isAuthorized, playing, title: item ? item.title : null,
+      artist: item ? item.artistName : null, album: item ? item.albumName : null, cover,
+      duration_ms: item ? item.playbackDuration || 0 : 0,
+      position_ms: Math.round((music.currentPlaybackTime || 0) * 1000) }) }).catch(() => {});
 }
 
 // ---- commands from the bridge ----

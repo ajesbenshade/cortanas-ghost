@@ -47,6 +47,9 @@ Ubuntu server here) and talks to the speaker over Wi-Fi.
   "next", "turn it down", "what's playing".
 - **AirPlay.** Pick "Cortana" from the AirPlay menu on an iPhone, iPad or Mac.
   The music is lowered while Cortana listens and talks.
+- **Music on the dashboard.** Apple Music and AirPlay show up as a "Music"
+  source on the speaker's dashboard, with cover art, play/pause/next/previous
+  and their own volume slider (needs this repo's firmware).
 
 About 2.5 to 3.5 s from the end of a question to the start of the answer with
 a GPU for speech-to-text and Claude Haiku through Copilot.

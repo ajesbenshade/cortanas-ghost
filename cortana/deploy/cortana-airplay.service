@@ -6,6 +6,8 @@ Wants=network-online.target avahi-daemon.service
 [Service]
 User=@USER@
 Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+# MPRIS on the session bus: the bridge reads now-playing and sends play/pause
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@UID@/bus
 ExecStart=/usr/bin/shairport-sync -c @REPO@/cortana/airplay/airplay.conf
 Restart=always
 RestartSec=5

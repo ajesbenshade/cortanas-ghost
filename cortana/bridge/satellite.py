@@ -328,6 +328,7 @@ class Link:
         self.barge_phraser = Phraser()
         self.barge_checked = 0.0
         self.barge_task: asyncio.Task | None = None
+        self.last_heard = time.monotonic()  # last event from the speaker
 
     async def transcribe(self, pcm: np.ndarray) -> str:
         r = await self.http.post("/v1/transcribe", params={"hotwords": "Cortana"},
@@ -595,6 +596,7 @@ class Link:
         try:
             while True:
                 kind, _data, payload = await recv(self.reader)
+                self.last_heard = time.monotonic()
                 if kind != "audio-chunk" or not payload:
                     continue
                 if self.speaking and Cfg.barge_in:
@@ -649,6 +651,11 @@ class Link:
                 payload = b""
             if isinstance(payload, Exception):
                 raise ConnectionError(str(payload) or type(payload).__name__)
+            # The speaker streams its mic nonstop. Silence means it rebooted or
+            # dropped off Wi-Fi without closing the connection: reconnect. (Older
+            # firmware mutes the mic while it speaks, so not during a reply.)
+            if not self.speaking and time.monotonic() - self.last_heard > 15:
+                raise ConnectionError("speaker stopped sending audio")
             # Never time out mid-sentence: a phrase in progress is always finished.
             if self.mode and time.monotonic() > self.mode_until and not self.phraser.active:
                 await self.stand_down("no reply heard" if self.mode == "convo"
