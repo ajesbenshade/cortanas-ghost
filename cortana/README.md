@@ -51,7 +51,8 @@ Ubuntu server here) and talks to the speaker over Wi-Fi.
   with the occasional light Halo nod, and family-friendly. Change it with
   `BRIDGE_SYSTEM_PROMPT`.
 - **Apple Music by voice.** "Play Abbey Road", "play that one", "pause",
-  "next", "turn it down", "what's playing".
+  "next", "turn it down", "what's playing". "Loop rain sounds" or "play ocean
+  waves on repeat" keeps it going (handy for sleep); "stop looping" ends it.
 - **AirPlay.** Pick "Cortana" from the AirPlay menu on an iPhone, iPad or Mac.
   The music is lowered while Cortana listens and talks.
 - **Music on the dashboard.** Apple Music and AirPlay show up as a "Music"

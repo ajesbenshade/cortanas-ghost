@@ -95,7 +95,7 @@ function report() {
   fetch("/v1/music/state", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ signed_in: music.isAuthorized, playing, title: item ? item.title : null,
       artist: item ? item.artistName : null, album: item ? item.albumName : null, cover,
-      duration_ms: item ? item.playbackDuration || 0 : 0,
+      duration_ms: item ? item.playbackDuration || 0 : 0, repeat: music.repeatMode || 0,
       position_ms: Math.round((music.currentPlaybackTime || 0) * 1000) }) }).catch(() => {});
 }
 
@@ -103,7 +103,15 @@ function report() {
 
 const first = (results, type) => results[type] && results[type].data && results[type].data[0];
 
-async function play({ query, artist, kind }) {
+// Loop mode: one song repeats on its own, an album or playlist as a whole.
+// While looping, autoplay (related songs after the queue) is off.
+function setRepeat(on, single) {
+  const mode = MusicKit.PlayerRepeatMode || { none: 0, one: 1, all: 2 };
+  music.repeatMode = on ? (single ? mode.one : mode.all) : mode.none;
+  music.autoplayEnabled = !on;
+}
+
+async function play({ query, artist, kind, repeat }) {
   const term = artist ? `${query} ${artist}` : query;
   const sf = music.storefrontId || "us";
   const res = await music.api.music(`/v1/catalog/${sf}/search`, { term, types: "songs,albums,playlists,artists", limit: 5 });
@@ -122,24 +130,26 @@ async function play({ query, artist, kind }) {
   // Start loading without waiting for the first note, so Cortana can say what
   // is playing while Apple Music is still buffering it.
   const start = (queue) => music.setQueue({ ...queue, startPlaying: true })
-    .then(report).catch((err) => log("couldn't start playback: " + (err && err.message || err)));
+    .then(() => { setRepeat(!!repeat, !!queue.song); report(); })
+    .catch((err) => log("couldn't start playback: " + (err && err.message || err)));
+  const loop = repeat ? " on repeat" : "";
   if (type === "songs") {
     start({ song: item.id });
-    return { ok: true, text: `Playing ${a.name} by ${a.artistName}.` };
+    return { ok: true, text: `Playing ${a.name} by ${a.artistName}${loop}.` };
   }
   if (type === "albums") {
     start({ album: item.id });
-    return { ok: true, text: `Playing the album ${a.name} by ${a.artistName}.` };
+    return { ok: true, text: `Playing the album ${a.name} by ${a.artistName}${loop}.` };
   }
   if (type === "playlists") {
     start({ playlist: item.id });
-    return { ok: true, text: `Playing the playlist ${a.name}.` };
+    return { ok: true, text: `Playing the playlist ${a.name}${loop}.` };
   }
   const top = await music.api.music(`/v1/catalog/${sf}/artists/${item.id}/view/top-songs`, { limit: 25 });
   const ids = ((top.data && top.data.data) || []).map((s) => s.id);
   if (!ids.length) return { ok: false, text: `I couldn't find songs by ${a.name}.` };
   start({ songs: ids });
-  return { ok: true, text: `Playing top songs by ${a.name}.` };
+  return { ok: true, text: `Playing top songs by ${a.name}${loop}.` };
 }
 
 async function run(cmd) {
@@ -162,6 +172,10 @@ async function run(cmd) {
     case "previous": await music.skipToPreviousItem(); return { ok: true, text: "" };
     case "nowplaying":
       return item ? { ok: true, text: `This is ${item.title} by ${item.artistName}.` } : { ok: true, text: "Nothing is playing." };
+    case "repeat":
+      if (!item) return { ok: false, text: "Nothing is playing to loop." };
+      setRepeat(cmd.on, true);
+      return { ok: true, text: cmd.on ? `Looping ${item.title}.` : "Okay, no more looping." };
     case "volume": {
       const base = ducked ? userVolume : music.volume;
       const level = Math.max(0, Math.min(1, cmd.level !== undefined ? cmd.level : base + cmd.delta));

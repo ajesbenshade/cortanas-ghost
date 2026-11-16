@@ -155,6 +155,13 @@ def parse(text: str) -> dict | None:
     if re.fullmatch(r"what(?:'s| is)(?: this| playing| this song| the name of this song)?(?: playing)?(?: right now)?|"
                     r"what song is this|who (?:is|sings) this", t):
         return {"action": "nowplaying"}
+    # Looping what is already playing, or stopping the loop.
+    if re.fullmatch(r"(?:loop|repeat)(?: (?:this|it|that))?(?: (?:song|track|one|album|playlist))?|"
+                    r"(?:put|keep) (?:this|it)(?: song)? on (?:repeat|a loop|loop)", t):
+        return {"action": "repeat", "on": True}
+    if re.fullmatch(r"(?:stop|quit|no more) (?:looping|repeating)(?: (?:this|it))?|"
+                    r"turn off (?:the )?(?:repeat|loop|looping)|(?:repeat|loop) off|don't repeat", t):
+        return {"action": "repeat", "on": False}
 
     m = re.fullmatch(r"(?:set |turn )?(?:the )?(?:music )?volume (?:to |at )?(\d{1,3})(?: ?(?:percent|%))?", t)
     if m:
@@ -166,6 +173,14 @@ def parse(text: str) -> dict | None:
                     r"volume down|turn down the (?:music|volume))", t):
         return {"action": "volume", "delta": -0.15}
 
+    # "loop rain sounds", "play ocean waves on repeat": play it and keep it going.
+    repeat = False
+    m = re.fullmatch(r"(?:loop|repeat) (.+)", t)
+    if m:
+        repeat, t = True, f"play {m.group(1)}"
+    m = re.fullmatch(r"(.+?),? (?:on (?:repeat|a loop|loop)|in a loop|looped|over and over)", t)
+    if m:
+        repeat, t = True, m.group(1)
     m = re.fullmatch(r"(?:play|put on|listen to|i want to hear|i'd like to hear) (.+)", t)
     if not m:
         return None
@@ -184,8 +199,8 @@ def parse(text: str) -> dict | None:
     if kind != "artist" and " by " in want:
         want, artist = (s.strip() for s in want.rsplit(" by ", 1))
     if not want or want in ("music", "a song", "something", "anything", "it"):
-        return {"action": "resume"}
-    return {"action": "play", "query": want, "artist": artist, "kind": kind}
+        return {"action": "repeat", "on": True} if repeat else {"action": "resume"}
+    return {"action": "play", "query": want, "artist": artist, "kind": kind, "repeat": repeat}
 
 
 async def try_handle(text: str) -> str | None:
@@ -216,9 +231,11 @@ async def execute(intent: dict) -> dict:
 MODEL_HELP = (
     "You can control Apple Music on this speaker. To do it, end your reply with one tag: "
     '<music action="play" query="what to search for" artist="artist, if known"/> '
-    '(add kind="song", "album", "playlist" or "artist" when it is clear), '
+    '(add kind="song", "album", "playlist" or "artist" when it is clear, and repeat="yes" to '
+    'loop it, e.g. for rain or white noise to sleep to), '
     'or <music action="pause"/>, <music action="resume"/>, <music action="next"/>, '
-    '<music action="previous"/>, or <music action="volume" level="0 to 100"/>. '
+    '<music action="previous"/>, <music action="repeat" on="yes|no"/> to loop what is playing, '
+    'or <music action="volume" level="0 to 100"/>. '
     "Use a tag only when the user wants the music changed, and keep the spoken part to a few words. "
     "The tag is never read aloud."
 )
@@ -245,9 +262,12 @@ async def run_tags(reply: str) -> str:
         if action == "play" and a.get("query"):
             kind = a.get("kind", "").lower()
             intent = {"action": "play", "query": a["query"], "artist": a.get("artist") or None,
-                      "kind": kind if kind in _KINDS else None}
+                      "kind": kind if kind in _KINDS else None,
+                      "repeat": a.get("repeat", "").lower() in ("yes", "true", "1", "on")}
         elif action in ("pause", "resume", "next", "previous"):
             intent = {"action": action}
+        elif action == "repeat":
+            intent = {"action": "repeat", "on": a.get("on", "yes").lower() in ("yes", "true", "1", "on")}
         elif action == "volume" and a.get("level", "").isdigit():
             intent = {"action": "volume", "level": max(0, min(100, int(a["level"]))) / 100}
         else:
