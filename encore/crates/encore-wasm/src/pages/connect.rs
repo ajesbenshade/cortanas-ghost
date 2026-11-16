@@ -259,7 +259,7 @@ fn scan_for_speakers() {
             if let Ok(ws) = web_sys::WebSocket::new("ws://192.168.43.1/ws") {
                 sleep(4000).await;
                 if ws.ready_state() == web_sys::WebSocket::OPEN {
-                    found.push(("Encore".to_string(), "192.168.43.1".to_string()));
+                    found.push(("Cortana's Ghost".to_string(), "192.168.43.1".to_string()));
                 }
                 ws.close().ok();
             }

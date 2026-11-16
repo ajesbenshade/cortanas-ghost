@@ -56,28 +56,28 @@ pub fn reduce_motion() -> bool {
 #[allow(dead_code)]
 pub fn glow_rgb(is_dark: bool) -> (u8, u8, u8) {
     if is_dark {
-        (255, 206, 106)
+        (127, 227, 255)
     } else {
-        (199, 154, 58)
+        (21, 146, 201)
     }
 }
 
 /// The brand accent (gold) as an RGB triplet for the current theme. Mirrors
-/// `brand::palette::ACCENT` (dark 230,179,77) / `ACCENT_LIGHT` (116,86,27).
+/// `brand::palette::ACCENT` (dark 79,200,255) / `ACCENT_LIGHT` (11,95,138).
 pub fn accent_rgb(is_dark: bool) -> (u8, u8, u8) {
     if is_dark {
-        (230, 179, 77)
+        (79, 200, 255)
     } else {
-        (116, 86, 27)
+        (11, 95, 138)
     }
 }
 
 /// Warm translucent backdrop tint a canvas paints over its area, per theme.
 pub fn canvas_bg(is_dark: bool) -> &'static str {
     if is_dark {
-        "rgba(20,17,13,0.6)"
+        "rgba(5,11,20,0.6)"
     } else {
-        "rgba(60,42,16,0.04)"
+        "rgba(10,60,90,0.04)"
     }
 }
 
@@ -85,9 +85,9 @@ pub fn canvas_bg(is_dark: bool) -> &'static str {
 /// elements that need to paint a solid disc/hole matching the page behind them.
 pub fn stage_rgb(is_dark: bool) -> (u8, u8, u8) {
     if is_dark {
-        (20, 17, 13)
+        (5, 11, 20)
     } else {
-        (244, 236, 221)
+        (234, 244, 250)
     }
 }
 
@@ -95,9 +95,9 @@ pub fn stage_rgb(is_dark: bool) -> (u8, u8, u8) {
 /// Cream on dark, near-black ink on light.
 pub fn ink_rgb(is_dark: bool) -> (u8, u8, u8) {
     if is_dark {
-        (242, 233, 218)
+        (227, 246, 255)
     } else {
-        (36, 29, 16)
+        (10, 22, 38)
     }
 }
 
@@ -107,9 +107,9 @@ pub fn ink_rgb(is_dark: bool) -> (u8, u8, u8) {
 /// per-line alpha they want.
 pub fn grid_rgb(is_dark: bool) -> (u8, u8, u8) {
     if is_dark {
-        (242, 233, 218)
+        (227, 246, 255)
     } else {
-        (60, 42, 16)
+        (10, 60, 90)
     }
 }
 
@@ -119,9 +119,9 @@ pub fn grid_rgb(is_dark: bool) -> (u8, u8, u8) {
 /// `rgba_str` and the per-use alpha they want.
 pub fn muted_rgb(is_dark: bool) -> (u8, u8, u8) {
     if is_dark {
-        (154, 142, 114)
+        (127, 179, 209)
     } else {
-        (122, 108, 76)
+        (61, 102, 128)
     }
 }
 
@@ -208,27 +208,27 @@ mod tests {
 
     #[test]
     fn glow_is_brightest_gold_in_dark() {
-        assert_eq!(glow_rgb(true), (255, 206, 106));
+        assert_eq!(glow_rgb(true), (127, 227, 255));
     }
 
     #[test]
     fn glow_dims_to_light_gold_in_light() {
-        assert_eq!(glow_rgb(false), (199, 154, 58));
+        assert_eq!(glow_rgb(false), (21, 146, 201));
     }
 
     #[test]
     fn accent_dark_matches_palette_split() {
-        assert_eq!(accent_rgb(true), (230, 179, 77));
+        assert_eq!(accent_rgb(true), (79, 200, 255));
     }
 
     #[test]
     fn accent_light_matches_palette_split() {
-        assert_eq!(accent_rgb(false), (116, 86, 27));
+        assert_eq!(accent_rgb(false), (11, 95, 138));
     }
 
     #[test]
     fn ink_dark_is_cream() {
-        assert_eq!(ink_rgb(true), (242, 233, 218));
+        assert_eq!(ink_rgb(true), (227, 246, 255));
     }
 
     #[test]

@@ -1,14 +1,14 @@
 {
-  "name": "Encore",
-  "short_name": "Encore",
-  "description": "Encore Smart Speaker Dashboard",
+  "name": "Cortana's Ghost",
+  "short_name": "Cortana",
+  "description": "Cortana's Ghost speaker dashboard",
   "start_url": "/",
   "scope": "/",
   "id": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0d1117",
-  "theme_color": "#0d1117",
+  "background_color": "#050b14",
+  "theme_color": "#050b14",
   "icons": [
     {
       "src": "/branding/pwa-icon-192-dark.png",

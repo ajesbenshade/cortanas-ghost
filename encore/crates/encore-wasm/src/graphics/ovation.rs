@@ -52,25 +52,25 @@ pub fn ray_length(r: f64, shaped: f32) -> f64 {
 pub fn ray_tier(energy: f32, is_dark: bool) -> &'static str {
     if is_dark {
         if energy >= 0.85 {
-            "rgb(255,206,106)" // glow peak (applause)
+            "rgb(127,227,255)" // glow peak (applause)
         } else if energy >= 0.55 {
-            "rgb(240,194,103)" // accent-hover
+            "rgb(143,220,255)" // accent-hover
         } else if energy >= 0.25 {
-            "rgb(230,179,77)" // accent
+            "rgb(79,200,255)" // accent
         } else {
-            "rgb(201,154,58)" // accent-active (dim)
+            "rgb(42,169,224)" // accent-active (dim)
         }
     } else {
         // Light "matinee": the rays sit on the cream stage, so louder reads as a
         // bolder, darker gold instead of the dark theme's brighter highlight.
         if energy >= 0.85 {
-            "rgb(116,86,27)" // accent (AA on light)
+            "rgb(11,95,138)" // accent (AA on light)
         } else if energy >= 0.55 {
-            "rgb(146,108,40)"
+            "rgb(8,80,111)"
         } else if energy >= 0.25 {
-            "rgb(176,134,58)"
+            "rgb(14,120,173)"
         } else {
-            "rgb(199,165,108)" // dim (recedes)
+            "rgb(124,199,234)" // dim (recedes)
         }
     }
 }
@@ -437,17 +437,17 @@ mod tests {
     #[test]
     fn ray_tier_is_static_and_monotone_in_brightness() {
         // Dark: four distinct tiers, brightest at the top.
-        assert_eq!(ray_tier(0.9, true), "rgb(255,206,106)");
-        assert_eq!(ray_tier(0.6, true), "rgb(240,194,103)");
-        assert_eq!(ray_tier(0.3, true), "rgb(230,179,77)");
-        assert_eq!(ray_tier(0.0, true), "rgb(201,154,58)");
+        assert_eq!(ray_tier(0.9, true), "rgb(127,227,255)");
+        assert_eq!(ray_tier(0.6, true), "rgb(143,220,255)");
+        assert_eq!(ray_tier(0.3, true), "rgb(79,200,255)");
+        assert_eq!(ray_tier(0.0, true), "rgb(42,169,224)");
         // Boundary checks.
-        assert_eq!(ray_tier(0.85, true), "rgb(255,206,106)");
-        assert_eq!(ray_tier(0.55, true), "rgb(240,194,103)");
-        assert_eq!(ray_tier(0.25, true), "rgb(230,179,77)");
+        assert_eq!(ray_tier(0.85, true), "rgb(127,227,255)");
+        assert_eq!(ray_tier(0.55, true), "rgb(143,220,255)");
+        assert_eq!(ray_tier(0.25, true), "rgb(79,200,255)");
         // Light theme returns a distinct, darker palette (never the dark tiers).
         assert_ne!(ray_tier(0.9, false), ray_tier(0.9, true));
-        assert_eq!(ray_tier(0.9, false), "rgb(116,86,27)");
+        assert_eq!(ray_tier(0.9, false), "rgb(11,95,138)");
     }
 
     #[test]

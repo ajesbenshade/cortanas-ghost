@@ -9,11 +9,12 @@ use crate::dom;
 pub fn inject() {
     let style = dom::create_el("style");
     let combined = format!(
-        "{}\n{}\n{}\n{}",
+        "{}\n{}\n{}\n{}\n{}",
         crate::brand::css::css(),
         CSS,
         crate::components::toast::css(),
-        crate::components::async_state::css()
+        crate::components::async_state::css(),
+        crate::brand::cortana::CSS
     );
     style.set_text_content(Some(&combined));
     let doc = dom::document();

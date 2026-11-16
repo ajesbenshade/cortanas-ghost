@@ -13,12 +13,12 @@ pub fn render(container: &web_sys::Element) {
 
     let (boot_source, safe_mode) = crate::state::with(|s| (s.boot_source.clone(), s.safe_mode));
     let firmware_label = match boot_source.as_str() {
-        "next" => format!("Encore v{} (OTA next)", encore_common::VERSION),
-        "rootfs" if safe_mode => format!("Encore v{} (safe mode)", encore_common::VERSION),
-        "rootfs" => format!("Encore v{} (rootfs)", encore_common::VERSION),
-        "lsync" => format!("Encore v{}", encore_common::VERSION),
-        "dev" => format!("Encore v{} (dev)", encore_common::VERSION),
-        _ => format!("Encore v{}", encore_common::VERSION),
+        "next" => format!("Cortana's Ghost · Encore v{} (OTA next)", encore_common::VERSION),
+        "rootfs" if safe_mode => format!("Cortana's Ghost · Encore v{} (safe mode)", encore_common::VERSION),
+        "rootfs" => format!("Cortana's Ghost · Encore v{} (rootfs)", encore_common::VERSION),
+        "lsync" => format!("Cortana's Ghost · Encore v{}", encore_common::VERSION),
+        "dev" => format!("Cortana's Ghost · Encore v{} (dev)", encore_common::VERSION),
+        _ => format!("Cortana's Ghost · Encore v{}", encore_common::VERSION),
     };
     stat_row(&card, "Firmware", &firmware_label);
     stat_row(&card, "SoC", "Marvell BG2CDP (88DE3006)");
@@ -92,19 +92,19 @@ Linux: chrome://settings/certificates \u{2192} Authorities \u{2192} Import",
     let proj_title = dom::el("div", "card-title", Some("Project"));
     dom::append(&proj_card, &proj_title);
 
-    let desc = dom::el("div", "", Some("Harman Kardon Invoke Community Firmware"));
+    let desc = dom::el("div", "", Some("Cortana's Ghost: the Harman Kardon Invoke as Cortana again"));
     dom::append(&proj_card, &desc);
-    let desc2 = dom::el("div", "text-sm text-muted mt-8", Some("Open-source firmware for the Harman Kardon Invoke. Started as a personal project on spare hardware, and built to be shared and learned from."));
+    let desc2 = dom::el("div", "text-sm text-muted mt-8", Some("Built on Encore, the open-source community firmware for the Harman Kardon Invoke by Scott Norton (github.com/ScottNorton/Encore), with a local voice bridge, Apple Music and AirPlay."));
     dom::append(&proj_card, &desc2);
 
     let repo_link = dom::create_el("a");
     dom::set_class(&repo_link, "text-sm");
     dom::set_style(&repo_link, "display", "inline-block");
     dom::set_style(&repo_link, "margin-top", "8px");
-    dom::set_attr(&repo_link, "href", "https://github.com/ScottNorton/Encore");
+    dom::set_attr(&repo_link, "href", "https://github.com/ajesbenshade/cortanas-ghost");
     dom::set_attr(&repo_link, "target", "_blank");
     dom::set_attr(&repo_link, "rel", "noopener");
-    dom::set_text(&repo_link, "github.com/ScottNorton/Encore");
+    dom::set_text(&repo_link, "github.com/ajesbenshade/cortanas-ghost");
     dom::append(&proj_card, &repo_link);
 
     dom::append(container, &proj_card);

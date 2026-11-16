@@ -281,7 +281,7 @@ fn render_name(container: &web_sys::Element) {
     let input = dom::create_el("input");
     input.set_id("setup-device-name");
     dom::set_attr(&input, "type", "text");
-    dom::set_attr(&input, "value", "Encore");
+    dom::set_attr(&input, "value", "Cortana");
     dom::set_attr(&input, "placeholder", "Device name");
     dom::set_class(&input, "input");
     dom::set_style(&input, "width", "100%");
@@ -488,7 +488,7 @@ fn setup_info_row(parent: &web_sys::Element, label: &str, value: &str) {
 fn finish_setup() {
     let device_name = get_input_value("setup-device-name");
     let device_name = if device_name.is_empty() {
-        "Encore".to_string()
+        "Cortana".to_string()
     } else {
         device_name
     };

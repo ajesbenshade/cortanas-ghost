@@ -825,7 +825,7 @@ pub fn set_connect_mode(active: bool) {
 pub fn update_device_name(name: &str) {
     if let Some(el) = dom::get_el("device-name") {
         // Don't show redundant name if it matches the brand
-        if name.eq_ignore_ascii_case("encore") || name.is_empty() {
+        if name.eq_ignore_ascii_case("encore") || name.eq_ignore_ascii_case("cortana's ghost") || name.is_empty() {
             dom::set_text(&el, "");
             dom::remove_class(&el, "visible");
         } else {

@@ -7,7 +7,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
 const GITHUB_RELEASES_URL: &str =
-    "https://api.github.com/repos/ScottNorton/Encore/releases?per_page=5";
+    "https://api.github.com/repos/ajesbenshade/cortanas-ghost/releases?per_page=5";
 const MAX_ENCORE_SIZE: f64 = 16.0 * 1024.0 * 1024.0;
 const MAX_ROOTFS_SIZE: f64 = 84_824_064.0;
 

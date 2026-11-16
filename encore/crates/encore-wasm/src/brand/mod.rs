@@ -6,6 +6,7 @@
 //! stops — those are intentionally duplicated (must render before WASM loads)
 //! and marked `KEEP IN SYNC` with this module.
 
+pub mod cortana;
 pub mod css;
 pub mod palette;
 
@@ -133,7 +134,7 @@ pub fn build_logo() -> web_sys::Element {
     let text = dom::create_el("span");
     text.set_id("logo-text");
     dom::set_class(&text, "logo-text");
-    dom::set_text(&text, "ENCORE");
+    dom::set_text(&text, "CORTANA'S GHOST");
     dom::append(&logo, &text);
 
     // Status text (shown during connecting state)
@@ -184,7 +185,7 @@ pub fn build_wordmark() -> web_sys::Element {
 
     let brand = dom::create_el("span");
     dom::set_class(&brand, "wordmark-brand");
-    dom::set_text(&brand, "Encore");
+    dom::set_text(&brand, "Cortana's Ghost");
     dom::append(&text_row, &brand);
 
     let rule_right = dom::create_div();
