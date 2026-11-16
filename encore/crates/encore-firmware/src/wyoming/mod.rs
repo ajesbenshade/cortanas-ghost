@@ -362,8 +362,25 @@ impl Session {
         let mut trigger_rx = self.trigger_rx.take();
         let mut mic_rx = self.mic_rx.take();
 
+        // `read_event` is not cancellation-safe: dropping it mid-read loses the bytes
+        // it has consumed. Run it in one long-lived future that select! polls by
+        // reference (never dropped) and receive whole events over a channel instead.
+        let (ev_tx, mut ev_rx) = tokio::sync::mpsc::channel(64);
+        let read_loop = async {
+            loop {
+                let ev = read_event(reader).await;
+                let done = !matches!(ev, Ok(Some(_)));
+                if ev_tx.send(ev).await.is_err() || done {
+                    break;
+                }
+            }
+            std::future::pending::<()>().await
+        };
+        tokio::pin!(read_loop);
+
         while self.streaming {
             tokio::select! {
+                _ = &mut read_loop => {}
                 mic_data = async {
                     if let Some(ref mut consumer) = mic_rx {
                         consumer.rx.recv().await
@@ -398,7 +415,11 @@ impl Session {
                         }
                     }
                 }
-                event = read_event(reader) => {
+                event = ev_rx.recv() => {
+                    let event = match event {
+                        Some(ev) => ev,
+                        None => break,
+                    };
                     match event {
                         Ok(Some(ev)) => {
                             // Never `?` out here: that would skip the mic_rx/trigger_rx
