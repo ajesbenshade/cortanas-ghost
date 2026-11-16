@@ -476,6 +476,7 @@ async def chat(session: str, user_text: str) -> str:
         system += " " + music.MODEL_HELP
     else:
         system += " Music is not available right now."
+    system += " " + music.sleep_status()  # also covers AirPlay, so always included
     messages = (
         [{"role": "system", "content": system}]
         + history[-2 * settings.history_turns :]

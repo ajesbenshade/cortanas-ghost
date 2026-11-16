@@ -53,6 +53,8 @@ Ubuntu server here) and talks to the speaker over Wi-Fi.
 - **Apple Music by voice.** "Play Abbey Road", "play that one", "pause",
   "next", "turn it down", "what's playing". "Loop rain sounds" or "play ocean
   waves on repeat" keeps it going (handy for sleep); "stop looping" ends it.
+  "Stop the music in 30 minutes" sets a sleep timer that fades it out gently
+  (Apple Music and AirPlay alike).
 - **AirPlay.** Pick "Cortana" from the AirPlay menu on an iPhone, iPad or Mac.
   The music is lowered while Cortana listens and talks.
 - **Music on the dashboard.** Apple Music and AirPlay show up as a "Music"

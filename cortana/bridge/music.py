@@ -135,6 +135,29 @@ _POLITE = r"(?:(?:can|could|would) you |please |hey |ok(?:ay)? )*"
 _TAIL = r"(?: (?:on|from|in) apple music)?(?: please)?[.!?]*$"
 
 
+_NUMBERS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "ten": 10,
+            "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "forty-five": 45,
+            "forty five": 45, "fifty": 50, "sixty": 60, "ninety": 90}
+
+
+def _minutes(text: str) -> int | None:
+    """'30 minutes', 'an hour', 'half an hour', '1 and a half hours' -> minutes."""
+    s = text.strip().lower().rstrip(".!?")
+    if re.fullmatch(r"(?:half an? hour|a half hour|half hour)", s):
+        return 30
+    m = re.fullmatch(r"(\d+|[a-z]+(?:[ -]five)?)( and a half)? (minutes?|mins?|hours?|hrs?)"
+                     r"( and a half)?", s)
+    if not m:
+        return None
+    n = int(m.group(1)) if m.group(1).isdigit() else _NUMBERS.get(m.group(1))
+    if not n:
+        return None
+    hours = m.group(3).startswith("h")
+    half = bool(m.group(2) or m.group(4))
+    total = n * 60 if hours else n
+    return total + (30 if hours and half else 0) if 0 < total <= 12 * 60 else None
+
+
 def parse(text: str) -> dict | None:
     """Turn a spoken phrase into a player command, or None if it isn't one."""
     t = re.sub(r"\s+", " ", text.strip().lower())
@@ -173,6 +196,14 @@ def parse(text: str) -> dict | None:
                     r"volume down|turn down the (?:music|volume))", t):
         return {"action": "volume", "delta": -0.15}
 
+    # Sleep timer: "stop the music in 30 minutes", "sleep timer for an hour".
+    m = re.fullmatch(r"(?:(?:set )?(?:a |the |my )?sleep timer(?: for)?|"
+                     r"(?:stop|turn off|pause|end) (?:the )?(?:music|it|this|playing) (?:in|after)) (.+)", t)
+    if m and (minutes := _minutes(m.group(1))):
+        return {"action": "sleep", "minutes": minutes}
+    if re.fullmatch(r"(?:cancel|stop|turn off|clear) (?:the |my )?sleep timer", t):
+        return {"action": "sleep", "minutes": 0}
+
     # "loop rain sounds", "play ocean waves on repeat": play it and keep it going.
     repeat = False
     m = re.fullmatch(r"(?:loop|repeat) (.+)", t)
@@ -207,12 +238,73 @@ async def try_handle(text: str) -> str | None:
     """If `text` is a music request and Apple Music is set up, do it and return
     the sentence to speak. Otherwise return None so the language model answers."""
     intent = parse(text)
+    if intent and intent["action"] == "sleep":  # works for AirPlay too
+        return set_sleep(intent["minutes"])
     if not intent or not credentials():
         return None
     if intent["action"] != "play" and not hub.connected:
         return None  # "stop", "continue" and so on mean something else with no player
     result = await execute(intent)
     return result.get("text") or ("Okay." if result.get("ok") else "That didn't work.")
+
+
+# ---------- sleep timer ----------
+# Fades out everything on the "Cortana Music" output (Apple Music and AirPlay
+# alike) over about half a minute, pauses, then restores the volume.
+
+_sleep_task: asyncio.Task | None = None
+_sleep_ends = 0.0
+
+
+def _span(minutes: float) -> str:
+    minutes = max(1, round(minutes))
+    h, m = divmod(minutes, 60)
+    parts = ([f"{h} hour" + ("s" if h > 1 else "")] if h else []) + \
+            ([f"{m} minute" + ("s" if m > 1 else "")] if m else [])
+    return " and ".join(parts)
+
+
+def sleep_status() -> str:
+    if _sleep_task and not _sleep_task.done():
+        import skills  # the household's clock; no import cycle (skills doesn't import music)
+        left = max(0, _sleep_ends - time.time())
+        when = f"{round(left)} seconds" if left < 120 else f"about {_span(left / 60)}"
+        ends = skills.now() + skills.timedelta(seconds=left)
+        return (f"Sleep timer (live, measured now): {when} left; the music fades out at "
+                f"{ends.strftime('%I:%M %p').lstrip('0')}. Use this to answer how long is left.")
+    return "No sleep timer is set."
+
+
+def set_sleep(minutes: int) -> str:
+    """Start (or with 0, cancel) the sleep timer; returns what to say."""
+    global _sleep_task, _sleep_ends
+    had = _sleep_task is not None and not _sleep_task.done()
+    if had:
+        _sleep_task.cancel()
+    if minutes <= 0:
+        return "Sleep timer cancelled." if had else "There's no sleep timer running."
+    _sleep_ends = time.time() + minutes * 60
+    _sleep_task = asyncio.create_task(_sleep_then_stop(minutes * 60))
+    return f"Okay, the music will fade out in {_span(minutes)}."
+
+
+async def _sleep_then_stop(seconds: float) -> None:
+    await asyncio.sleep(seconds)
+    await fade_out_and_stop()
+
+
+async def fade_out_and_stop() -> None:
+    try:
+        for level in range(95, 0, -5):  # about 30 s down to silence
+            await _pactl("set-sink-volume", "cortana_music", f"{level}%")
+            await asyncio.sleep(1.5)
+        if hub.connected:
+            await execute({"action": "pause"})
+        if (await airplay_now()).get("playing"):
+            await _busctl("call", *MPRIS, "Pause")
+        await asyncio.sleep(1)
+    finally:
+        await _pactl("set-sink-volume", "cortana_music", "100%")
 
 
 async def execute(intent: dict) -> dict:
@@ -235,7 +327,8 @@ MODEL_HELP = (
     'loop it, e.g. for rain or white noise to sleep to), '
     'or <music action="pause"/>, <music action="resume"/>, <music action="next"/>, '
     '<music action="previous"/>, <music action="repeat" on="yes|no"/> to loop what is playing, '
-    'or <music action="volume" level="0 to 100"/>. '
+    '<music action="volume" level="0 to 100"/>, or a sleep timer that fades the music out and '
+    'stops it: <music action="sleep" minutes="30"/> (minutes="0" cancels it). '
     "Use a tag only when the user wants the music changed, and keep the spoken part to a few words. "
     "The tag is never read aloud."
 )
@@ -268,6 +361,9 @@ async def run_tags(reply: str) -> str:
             intent = {"action": action}
         elif action == "repeat":
             intent = {"action": "repeat", "on": a.get("on", "yes").lower() in ("yes", "true", "1", "on")}
+        elif action == "sleep" and a.get("minutes", "").isdigit():
+            set_sleep(int(a["minutes"]))  # the model words the confirmation itself
+            continue
         elif action == "volume" and a.get("level", "").isdigit():
             intent = {"action": "volume", "level": max(0, min(100, int(a["level"]))) / 100}
         else:
