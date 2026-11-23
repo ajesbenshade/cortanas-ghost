@@ -66,6 +66,7 @@ let music = null;
 let unlocked = false;
 let userVolume = 1;
 let ducked = false;
+let loadedAt = Date.now();
 
 async function setup() {
   const r = await fetch("/v1/music/token");
@@ -74,6 +75,7 @@ async function setup() {
   if (!window.MusicKit) await new Promise((res) => document.addEventListener("musickitloaded", res, { once: true }));
   await MusicKit.configure({ developerToken: token, app: { name: "Cortana Bridge", build: "1.0" } });
   music = MusicKit.getInstance();
+  loadedAt = Date.now();
   music.autoplayEnabled = true;   // keep playing related songs when the queue ends
   userVolume = music.volume;
   for (const ev of ["playbackStateDidChange", "nowPlayingItemDidChange", "authorizationStatusDidChange"]) {
@@ -217,6 +219,13 @@ for (const b of document.querySelectorAll("button[data-act]")) {
 // On a server with no one to click Start, the browser is launched with
 // autoplay allowed and opens /music?unattended.
 if (new URLSearchParams(location.search).has("unattended")) { unlocked = true; set("s-sound", "enabled", true); }
+
+// The developer token from the bridge lasts a week and MusicKit keeps the one
+// it started with, so reload for a fresh token once a day while nothing plays.
+setInterval(() => {
+  const idle = !music || music.playbackState !== MusicKit.PlaybackStates.playing;
+  if (idle && Date.now() - loadedAt > 24 * 3600 * 1000) location.reload();
+}, 5 * 60 * 1000);
 
 listen();
 setup().catch((err) => { set("s-apple", "failed to load", false); log("setup error: " + (err && err.message || err)); });

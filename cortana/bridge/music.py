@@ -65,7 +65,7 @@ def developer_token(origin: str) -> str:
 
     team, key_id, key_file = creds
     now = int(time.time())
-    expires = now + 12 * 3600
+    expires = now + 7 * 86400  # the player page reloads for a fresh one daily
     token = jwt.encode(
         # "origin" makes Apple reject this token from any other web page.
         {"iss": team, "iat": now, "exp": expires, "origin": [origin]},
