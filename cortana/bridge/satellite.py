@@ -731,6 +731,7 @@ async def main() -> None:
     async with httpx.AsyncClient(base_url=Cfg.bridge, headers=headers, timeout=120) as http:
         waiting = False
         while True:
+            writer = None
             try:
                 reader, writer = await connect()
                 print(f"Connected to speaker at {Cfg.found}:{Cfg.port}")
@@ -741,6 +742,11 @@ async def main() -> None:
                     print(f"Speaker link lost ({e}); searching for the speaker...")
                     waiting = True
                 await asyncio.sleep(3)
+            finally:
+                # The speaker serves one client at a time and keeps streaming to
+                # a connection left open, so a new one would hear nothing.
+                if writer is not None:
+                    writer.close()
 
 
 if __name__ == "__main__":
